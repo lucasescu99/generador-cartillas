@@ -250,7 +250,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     }
 
     const pdfBytes = await merged.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
     const pageCount = merged.getPageCount();
     const sizeKb = Math.round(blob.size / 1024);
 

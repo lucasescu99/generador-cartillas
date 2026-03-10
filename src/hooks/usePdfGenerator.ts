@@ -19,7 +19,7 @@ type Status = 'idle' | 'generating' | 'complete' | 'error';
 
 export function usePdfGenerator() {
   const [status, setStatus] = useState<Status>('idle');
-  const [progress, setProgress] = useState<Progress>({ current: 0, total: 0, message: '' });
+  const [progress, setProgress] = useState<Progress>({ phase: 'generating', current: 0, total: 0, message: '' });
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const blobRef = useRef<Blob | null>(null);
