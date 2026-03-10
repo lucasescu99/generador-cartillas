@@ -107,7 +107,7 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   const MIN_TAB_W = 28;
   const tabPadX = 3;
   const pageNumGap = 5.6;
-  const isRightSide = pageNum % 2 === 1; // odd = right, even = left
+  const isRightSide = pageNum % 2 === 0; // even = right, odd = left
 
   doc.setFontSize(FS_HEADER_TAB);
   doc.setFont('helvetica', 'normal');
