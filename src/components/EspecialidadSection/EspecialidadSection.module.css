@@ -11,3 +11,28 @@
   border-bottom: 2px solid var(--color-primary);
   margin-bottom: 10px;
 }
+
+.provincia {
+  margin-bottom: 12px;
+  margin-left: 4px;
+}
+
+.provTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.localidad {
+  margin-left: 12px;
+  margin-bottom: 8px;
+}
+
+.locTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}

@@ -6,20 +6,20 @@ interface Props {
 }
 
 export function PrestadorCard({ prestador: p }: Props) {
-  const nombreClass = [styles.nombre, p.esCentro ? styles.centro : ''].filter(Boolean).join(' ');
-
   return (
     <div className={styles.card}>
-      <div className={nombreClass}>
+      <div className={styles.nombre}>
         {p.nombre}
-        {p.indicador && ` (${p.indicador})`}
+        {p.nombreInsti && <span className={styles.insti}> ({p.nombreInsti})</span>}
       </div>
-      {p.direcciones.map((d, i) => (
-        <div key={i} className={styles.detalle}>
-          {d.calle && <div>{d.calle}</div>}
-          {d.telefonos.length > 0 && <div>{d.telefonos.join('  ')}</div>}
+      <div className={styles.detalle}>
+        {p.direccion && <div>{p.direccion}</div>}
+      </div>
+      {p.subespecialidades.length > 0 && (
+        <div className={styles.subs}>
+          {p.subespecialidades.join(' · ')}
         </div>
-      ))}
+      )}
     </div>
   );
 }

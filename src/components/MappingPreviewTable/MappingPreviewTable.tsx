@@ -18,16 +18,20 @@ export function MappingPreviewTable({ rows }: Props) {
             <th>Especialidad</th>
             <th>Nombre</th>
             <th>Dirección</th>
-            <th>Teléfono</th>
+            <th>Localidad</th>
+            <th>Provincia</th>
+            <th>Subespecialidades</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p, i) => (
             <tr key={i}>
               <td>{p.especialidad}</td>
-              <td>{p.nombre}{p.indicador ? ` (${p.indicador})` : ''}</td>
-              <td>{p.direcciones[0]?.calle || '—'}</td>
-              <td>{p.direcciones[0]?.telefonos[0] || '—'}</td>
+              <td>{p.nombre}{p.nombreInsti ? ` (${p.nombreInsti})` : ''}</td>
+              <td>{p.direccion || '—'}</td>
+              <td>{p.localidad || '—'}</td>
+              <td>{p.provincia || '—'}</td>
+              <td>{p.subespecialidades.length > 0 ? p.subespecialidades.join(', ') : '—'}</td>
             </tr>
           ))}
         </tbody>

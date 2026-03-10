@@ -11,24 +11,24 @@ export function PreviewPage() {
   const { cartillaData } = useCartilla();
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const grouped = useMemo(() => {
-    if (!cartillaData) return new Map();
+  const groups = useMemo(() => {
+    if (!cartillaData) return [];
     return groupByEspecialidad(cartillaData.prestadores);
   }, [cartillaData]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const [esp, list] of grouped) {
-      m.set(esp, list.length);
+    for (const g of groups) {
+      m.set(g.nombre, g.totalPrestadores);
     }
     return m;
-  }, [grouped]);
+  }, [groups]);
 
   if (!cartillaData || cartillaData.prestadores.length === 0) {
     return <Navigate to="/" replace />;
   }
 
-  const especialidades = Array.from(grouped.keys());
+  const especialidades = groups.map((g) => g.nombre);
 
   const scrollTo = (esp: string) => {
     sectionRefs.current.get(esp)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -45,7 +45,7 @@ export function PreviewPage() {
       <main className={styles.main}>
         <div className={styles.topBar}>
           <div className={styles.titleGroup}>
-            <h1>Vista Previa</h1>
+            <h1>Vista Previa{cartillaData.planNombre ? ` — ${cartillaData.planNombre}` : ''}</h1>
             <p>
               {cartillaData.totalEspecialidades} especialidades — {cartillaData.totalPrestadores.toLocaleString()} prestadores
             </p>
@@ -55,15 +55,12 @@ export function PreviewPage() {
           </button>
         </div>
 
-        {especialidades.map((esp) => (
+        {groups.map((g) => (
           <div
-            key={esp}
-            ref={(el) => { if (el) sectionRefs.current.set(esp, el); }}
+            key={g.nombre}
+            ref={(el) => { if (el) sectionRefs.current.set(g.nombre, el); }}
           >
-            <EspecialidadSection
-              especialidad={esp}
-              prestadores={grouped.get(esp)!}
-            />
+            <EspecialidadSection group={g} />
           </div>
         ))}
       </main>

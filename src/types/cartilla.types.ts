@@ -1,34 +1,32 @@
 export interface Prestador {
-  especialidad: string;
+  codigo: string;
   nombre: string;
-  indicador?: string;
-  esCentro?: boolean;
-  direcciones: Direccion[];
-}
-
-export interface Direccion {
-  calle: string;
-  telefonos: string[];
+  direccion: string;
+  localidad: string;
+  provincia: string;
+  especialidad: string;
+  nombreInsti?: string;
+  subespecialidades: string[];
 }
 
 export interface CartillaData {
-  prestadores: Prestador[];
+  planNombre: string;
   especialidades: string[];
   totalEspecialidades: number;
   totalPrestadores: number;
+  prestadores: Prestador[];
 }
 
 export interface ColumnMapping {
-  especialidad: string;
+  codigo: string;
   nombre: string;
-  direccion1: string;
-  telefono1: string;
-  indicador?: string;
-  esCentro?: string;
-  telefono2?: string;
-  direccion2?: string;
-  telefono3?: string;
-  telefono4?: string;
+  direccion: string;
+  localidad: string;
+  provincia: string;
+  especialidad: string;
+  subespecialidad?: string;
+  nombreInsti?: string;
+  planWeb?: string;
 }
 
 export interface ParsedFile {

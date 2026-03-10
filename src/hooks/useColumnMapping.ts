@@ -10,15 +10,14 @@ export interface MappingField {
 
 export const MAPPING_FIELDS: MappingField[] = [
   { key: 'especialidad', label: 'Especialidad', required: true },
-  { key: 'nombre', label: 'Nombre', required: true },
-  { key: 'direccion1', label: 'Dirección 1', required: true },
-  { key: 'telefono1', label: 'Teléfono 1', required: true },
-  { key: 'indicador', label: 'Indicador', required: false },
-  { key: 'esCentro', label: 'Es Centro', required: false },
-  { key: 'telefono2', label: 'Teléfono 2', required: false },
-  { key: 'direccion2', label: 'Dirección 2', required: false },
-  { key: 'telefono3', label: 'Teléfono 3', required: false },
-  { key: 'telefono4', label: 'Teléfono 4', required: false },
+  { key: 'nombre', label: 'Nombre Prestador', required: true },
+  { key: 'direccion', label: 'Dirección', required: true },
+  { key: 'localidad', label: 'Localidad', required: true },
+  { key: 'provincia', label: 'Provincia', required: true },
+  { key: 'codigo', label: 'Código Prestador', required: false },
+  { key: 'subespecialidad', label: 'Subespecialidad', required: false },
+  { key: 'nombreInsti', label: 'Nombre Institución', required: false },
+  { key: 'planWeb', label: 'Nombre Plan', required: false },
 ];
 
 function autoDetect(headers: string[]): Partial<ColumnMapping> {
@@ -35,12 +34,16 @@ function autoDetect(headers: string[]): Partial<ColumnMapping> {
     }
   };
 
-  tryMatch('especialidad', 'especialidad', 'specialty', 'esp');
-  tryMatch('nombre', 'nombre', 'name', 'prestador');
-  tryMatch('indicador', 'indicador', 'indicator', 'plan');
-  tryMatch('esCentro', 'es_centro', 'centro', 'center');
-  tryMatch('direccion1', 'direccion', 'address', 'dir');
-  tryMatch('telefono1', 'telefono', 'phone', 'tel');
+  // Order matters: more specific patterns first to avoid collisions
+  tryMatch('especialidad', 'especialidad_nombre', 'especialidad', 'specialty');
+  tryMatch('subespecialidad', 'subespecialidad', 'sub_especialidad');
+  tryMatch('nombre', 'nombre_prestador', 'nombre_prest', 'nombre', 'name');
+  tryMatch('direccion', 'direccion', 'address', 'dir');
+  tryMatch('localidad', 'localidad', 'ciudad', 'city');
+  tryMatch('provincia', 'provincia', 'state', 'prov');
+  tryMatch('codigo', 'prestador', 'codigo', 'code', 'id');
+  tryMatch('nombreInsti', 'nombre_insti', 'institucion', 'institution');
+  tryMatch('planWeb', 'nombre_plan', 'plan_web', 'plan');
 
   return auto;
 }
@@ -66,7 +69,7 @@ export function useColumnMapping(parsedFile: ParsedFile | null) {
 
   const previewRows: Prestador[] = useMemo(() => {
     if (!isValid || !parsedFile) return [];
-    return transformRows(parsedFile.rows.slice(0, 5), mapping as ColumnMapping);
+    return transformRows(parsedFile.rows.slice(0, 10), mapping as ColumnMapping);
   }, [mapping, isValid, parsedFile]);
 
   const totalDetected = useMemo(() => {

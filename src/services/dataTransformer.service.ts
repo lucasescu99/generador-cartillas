@@ -1,65 +1,79 @@
-import type { Prestador, Direccion, ColumnMapping, CartillaData } from '../types/cartilla.types';
+import type { Prestador, ColumnMapping, CartillaData } from '../types/cartilla.types';
 
-/** SheetJS can return numbers, booleans, etc. — always coerce to string. */
 function str(value: unknown): string {
   if (value == null) return '';
   return String(value).trim();
 }
 
+/**
+ * Transforms raw CSV rows into Prestador objects.
+ * Merges rows with the same prestador code + especialidad + dirección,
+ * aggregating their subespecialidades.
+ */
 export function transformRows(
   rows: Record<string, unknown>[],
   mapping: ColumnMapping,
 ): Prestador[] {
-  return rows
-    .map((row) => {
-      const direcciones: Direccion[] = [];
+  // Build a map keyed by (codigo+especialidad+direccion+localidad) to merge subespecialidades
+  const mergeMap = new Map<string, Prestador>();
 
-      const dir1: Direccion = {
-        calle: str(row[mapping.direccion1]),
-        telefonos: [str(row[mapping.telefono1])].filter(Boolean),
-      };
-      if (mapping.telefono2 && str(row[mapping.telefono2])) {
-        dir1.telefonos.push(str(row[mapping.telefono2]));
+  for (const row of rows) {
+    const codigo = str(row[mapping.codigo]);
+    const nombre = str(row[mapping.nombre]);
+    const direccion = str(row[mapping.direccion]);
+    const localidad = str(row[mapping.localidad]);
+    const provincia = str(row[mapping.provincia]);
+    const especialidad = str(row[mapping.especialidad]).toUpperCase();
+    const subespecialidad = mapping.subespecialidad ? str(row[mapping.subespecialidad]) : '';
+    const nombreInsti = mapping.nombreInsti ? str(row[mapping.nombreInsti]) : '';
+
+    if (!especialidad || !nombre) continue;
+
+    const key = `${codigo}||${especialidad}||${direccion}||${localidad}`.toUpperCase();
+
+    if (mergeMap.has(key)) {
+      const existing = mergeMap.get(key)!;
+      if (subespecialidad && !existing.subespecialidades.includes(subespecialidad.toUpperCase())) {
+        existing.subespecialidades.push(subespecialidad.toUpperCase());
       }
-      if (dir1.calle) direcciones.push(dir1);
+    } else {
+      mergeMap.set(key, {
+        codigo,
+        nombre,
+        direccion,
+        localidad,
+        provincia: provincia.trim(),
+        especialidad,
+        nombreInsti: nombreInsti || undefined,
+        subespecialidades: subespecialidad ? [subespecialidad.toUpperCase()] : [],
+      });
+    }
+  }
 
-      if (mapping.direccion2 && str(row[mapping.direccion2])) {
-        const dir2: Direccion = {
-          calle: str(row[mapping.direccion2]),
-          telefonos: [],
-        };
-        if (mapping.telefono3 && str(row[mapping.telefono3])) {
-          dir2.telefonos.push(str(row[mapping.telefono3]));
-        }
-        if (mapping.telefono4 && str(row[mapping.telefono4])) {
-          dir2.telefonos.push(str(row[mapping.telefono4]));
-        }
-        direcciones.push(dir2);
-      }
-
-      const esCentroVal = mapping.esCentro ? str(row[mapping.esCentro]).toLowerCase() : '';
-      const esCentro = ['true', 'si', 'sí', '1', 'yes'].includes(esCentroVal);
-
-      return {
-        especialidad: str(row[mapping.especialidad]).toUpperCase(),
-        nombre: str(row[mapping.nombre]),
-        indicador: mapping.indicador ? str(row[mapping.indicador]) || undefined : undefined,
-        esCentro: esCentro || undefined,
-        direcciones,
-      };
-    })
-    .filter((p) => p.especialidad && p.nombre);
+  const result = Array.from(mergeMap.values());
+  result.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  return result;
 }
 
-export function buildCartillaData(prestadores: Prestador[]): CartillaData {
+export function buildCartillaData(
+  prestadores: Prestador[],
+  rows: Record<string, unknown>[],
+  mapping: ColumnMapping,
+): CartillaData {
   const especialidadesSet = new Set<string>();
   for (const p of prestadores) {
     especialidadesSet.add(p.especialidad);
   }
-
   const especialidades = Array.from(especialidadesSet).sort((a, b) => a.localeCompare(b, 'es'));
 
+  // Extract plan name from first row
+  let planNombre = '';
+  if (mapping.planWeb && rows.length > 0) {
+    planNombre = str(rows[0][mapping.planWeb]);
+  }
+
   return {
+    planNombre,
     prestadores,
     especialidades,
     totalEspecialidades: especialidades.length,
@@ -67,22 +81,81 @@ export function buildCartillaData(prestadores: Prestador[]): CartillaData {
   };
 }
 
-export function groupByEspecialidad(prestadores: Prestador[]): Map<string, Prestador[]> {
-  const map = new Map<string, Prestador[]>();
+export interface ProvinciaGroup {
+  nombre: string;
+  localidades: LocalidadGroup[];
+}
+
+export interface LocalidadGroup {
+  nombre: string;
+  prestadores: Prestador[];
+}
+
+export interface EspecialidadGroup {
+  nombre: string;
+  provincias: ProvinciaGroup[];
+  totalPrestadores: number;
+}
+
+/**
+ * Groups prestadores by especialidad → provincia → localidad.
+ * Returns a sorted array of EspecialidadGroup.
+ */
+export function groupByEspecialidad(prestadores: Prestador[]): EspecialidadGroup[] {
+  const espMap = new Map<string, Prestador[]>();
 
   for (const p of prestadores) {
-    if (!map.has(p.especialidad)) {
-      map.set(p.especialidad, []);
+    if (!espMap.has(p.especialidad)) espMap.set(p.especialidad, []);
+    espMap.get(p.especialidad)!.push(p);
+  }
+
+  const groups: EspecialidadGroup[] = [];
+
+  const sortedEsps = Array.from(espMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+  for (const espNombre of sortedEsps) {
+    const prestList = espMap.get(espNombre)!;
+
+    // Group by provincia
+    const provMap = new Map<string, Prestador[]>();
+    for (const p of prestList) {
+      const prov = p.provincia || 'SIN PROVINCIA';
+      if (!provMap.has(prov)) provMap.set(prov, []);
+      provMap.get(prov)!.push(p);
     }
-    map.get(p.especialidad)!.push(p);
+
+    const provincias: ProvinciaGroup[] = [];
+    const sortedProvs = Array.from(provMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+    for (const provNombre of sortedProvs) {
+      const provPrestadores = provMap.get(provNombre)!;
+
+      // Group by localidad
+      const locMap = new Map<string, Prestador[]>();
+      for (const p of provPrestadores) {
+        const loc = p.localidad || 'SIN LOCALIDAD';
+        if (!locMap.has(loc)) locMap.set(loc, []);
+        locMap.get(loc)!.push(p);
+      }
+
+      const localidades: LocalidadGroup[] = [];
+      const sortedLocs = Array.from(locMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+      for (const locNombre of sortedLocs) {
+        const locPrestadores = locMap.get(locNombre)!;
+        locPrestadores.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        localidades.push({ nombre: locNombre, prestadores: locPrestadores });
+      }
+
+      provincias.push({ nombre: provNombre, localidades });
+    }
+
+    groups.push({
+      nombre: espNombre,
+      provincias,
+      totalPrestadores: prestList.length,
+    });
   }
 
-  // Ordenar prestadores dentro de cada especialidad
-  for (const [, list] of map) {
-    list.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  }
-
-  return new Map(
-    Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, 'es')),
-  );
+  return groups;
 }

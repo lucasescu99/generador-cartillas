@@ -9,12 +9,21 @@
   color: var(--color-text);
 }
 
-.centro {
-  text-transform: uppercase;
+.insti {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .detalle {
   font-size: 12px;
   color: var(--color-text-secondary);
   line-height: 1.4;
+}
+
+.subs {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin-top: 2px;
 }

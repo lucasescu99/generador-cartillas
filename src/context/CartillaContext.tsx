@@ -32,7 +32,7 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
 
   const applyMapping = useCallback((mapping: ColumnMapping, allRows: Record<string, unknown>[]) => {
     const prestadores = transformRows(allRows, mapping);
-    const cartillaData = buildCartillaData(prestadores);
+    const cartillaData = buildCartillaData(prestadores, allRows, mapping);
     setState((prev) => ({ ...prev, mapping, cartillaData }));
   }, []);
 
