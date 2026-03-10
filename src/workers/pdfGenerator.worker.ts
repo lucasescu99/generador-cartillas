@@ -105,33 +105,46 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   const tabH = 5.5;
   const tabY = 6;
   const MIN_TAB_W = 28;
-  const tabPadX = 3; // horizontal padding inside tab
+  const tabPadX = 3;
+  const pageNumGap = 5.6;
+  const isRightSide = pageNum % 2 === 1; // odd = right, even = left
 
   doc.setFontSize(FS_HEADER_TAB);
   doc.setFont('helvetica', 'normal');
 
-  // Measure tab widths with minimum
   const provText = provincia.toUpperCase();
   const provTabW = Math.max(MIN_TAB_W, doc.getTextWidth(provText) + tabPadX * 2);
 
   const secText = 'CUERPO MEDICO';
   const secTabW = Math.max(MIN_TAB_W, doc.getTextWidth(secText) + tabPadX * 2);
 
-  // Page number to the right, 16px (~5.6mm) away from tabs
-  const pageNumGap = 5.6;
   const pageNumText = String(pageNum);
   const pageNumW = doc.getTextWidth(pageNumText);
-  const pageNumX = PAGE_W - MARGIN_RIGHT;
 
-  const tabsRight = pageNumX - pageNumGap - pageNumW;
-  const secTabX = tabsRight - secTabW;
-  const provTabX = secTabX - provTabW;
+  let provTabX: number;
+  let secTabX: number;
+  let pageNumX: number;
 
-  // Province tab (lighter blue) - sharp corners
+  if (isRightSide) {
+    // Right-aligned: [PROVINCIA] [CUERPO MEDICO]  pageNum
+    const rightEdge = PAGE_W - MARGIN_RIGHT;
+    pageNumX = rightEdge - pageNumW;
+    const tabsRight = pageNumX - pageNumGap;
+    secTabX = tabsRight - secTabW;
+    provTabX = secTabX - provTabW;
+  } else {
+    // Left-aligned: pageNum  [CUERPO MEDICO] [PROVINCIA]
+    pageNumX = MARGIN_LEFT;
+    const tabsLeft = pageNumX + pageNumW + pageNumGap;
+    secTabX = tabsLeft;
+    provTabX = secTabX + secTabW;
+  }
+
+  // Province tab (lighter blue)
   doc.setFillColor(...COLOR_HEADER_LIGHT);
   doc.rect(provTabX, tabY, provTabW, tabH, 'F');
 
-  // Section tab (darker blue) - sharp corners
+  // Section tab (darker blue)
   doc.setFillColor(...COLOR_HEADER_DARK);
   doc.rect(secTabX, tabY, secTabW, tabH, 'F');
 
@@ -140,15 +153,14 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   doc.setTextColor(...COLOR_WHITE);
   doc.setFontSize(FS_HEADER_TAB);
 
-  // Center text horizontally in each tab
   const provTW = doc.getTextWidth(provText);
   doc.text(provText, provTabX + (provTabW - provTW) / 2, textY);
   const secTW = doc.getTextWidth(secText);
   doc.text(secText, secTabX + (secTabW - secTW) / 2, textY);
 
-  // Page number - vertically centered with tabs
+  // Page number
   doc.setTextColor(...COLOR_TEXT);
-  doc.text(pageNumText, pageNumX - pageNumW, textY);
+  doc.text(pageNumText, pageNumX, textY);
 }
 
 function nextColumn(doc: jsPDF, cursor: Cursor, provincia: string): void {
