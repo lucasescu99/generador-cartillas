@@ -1,0 +1,20 @@
+.card {
+  margin-bottom: 8px;
+  padding-left: 8px;
+}
+
+.nombre {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.centro {
+  text-transform: uppercase;
+}
+
+.detalle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}

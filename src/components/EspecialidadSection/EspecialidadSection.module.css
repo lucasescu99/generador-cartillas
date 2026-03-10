@@ -1,0 +1,13 @@
+.section {
+  margin-bottom: 20px;
+}
+
+.header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--color-primary);
+  margin-bottom: 10px;
+}
