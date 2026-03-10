@@ -101,41 +101,54 @@ function remaining(cursor: Cursor): number {
 
 // --- Drawing functions ---
 
-function drawHeader(doc: jsPDF, provincia: string): void {
-  // Compact tabs at top-right
-  const tabH = 10;
-  const tabY = 5;
+function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
+  const tabH = 5.5;
+  const tabY = 6;
+  const MIN_TAB_W = 28;
+  const tabPadX = 3; // horizontal padding inside tab
 
   doc.setFontSize(FS_HEADER_TAB);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('helvetica', 'normal');
 
-  // Measure tab widths
+  // Measure tab widths with minimum
   const provText = provincia.toUpperCase();
-  const provTextW = doc.getTextWidth(provText);
-  const provTabW = provTextW + 10;
+  const provTabW = Math.max(MIN_TAB_W, doc.getTextWidth(provText) + tabPadX * 2);
 
   const secText = 'CUERPO MEDICO';
-  const secTextW = doc.getTextWidth(secText);
-  const secTabW = secTextW + 10;
+  const secTabW = Math.max(MIN_TAB_W, doc.getTextWidth(secText) + tabPadX * 2);
 
-  const tabsRight = PAGE_W - MARGIN_RIGHT;
+  // Page number to the right, 16px (~5.6mm) away from tabs
+  const pageNumGap = 5.6;
+  const pageNumText = String(pageNum);
+  const pageNumW = doc.getTextWidth(pageNumText);
+  const pageNumX = PAGE_W - MARGIN_RIGHT;
+
+  const tabsRight = pageNumX - pageNumGap - pageNumW;
   const secTabX = tabsRight - secTabW;
-  const provTabX = secTabX - provTabW + 1; // slight overlap
+  const provTabX = secTabX - provTabW;
 
-  // Province tab (lighter blue)
+  // Province tab (lighter blue) - sharp corners
   doc.setFillColor(...COLOR_HEADER_LIGHT);
-  doc.roundedRect(provTabX, tabY, provTabW, tabH, 1, 1, 'F');
+  doc.rect(provTabX, tabY, provTabW, tabH, 'F');
 
-  // Section tab (darker blue)
+  // Section tab (darker blue) - sharp corners
   doc.setFillColor(...COLOR_HEADER_DARK);
-  doc.roundedRect(secTabX, tabY, secTabW, tabH, 1, 1, 'F');
+  doc.rect(secTabX, tabY, secTabW, tabH, 'F');
 
-  // Tab texts
+  // Tab texts - centered vertically
+  const textY = tabY + tabH / 2 + FS_HEADER_TAB * 0.13;
   doc.setTextColor(...COLOR_WHITE);
-  doc.setFont('helvetica', 'normal');
   doc.setFontSize(FS_HEADER_TAB);
-  doc.text(provText, provTabX + 5, tabY + tabH / 2 + FS_HEADER_TAB * 0.15);
-  doc.text(secText, secTabX + 5, tabY + tabH / 2 + FS_HEADER_TAB * 0.15);
+
+  // Center text horizontally in each tab
+  const provTW = doc.getTextWidth(provText);
+  doc.text(provText, provTabX + (provTabW - provTW) / 2, textY);
+  const secTW = doc.getTextWidth(secText);
+  doc.text(secText, secTabX + (secTabW - secTW) / 2, textY);
+
+  // Page number - vertically centered with tabs
+  doc.setTextColor(...COLOR_TEXT);
+  doc.text(pageNumText, pageNumX - pageNumW, textY);
 }
 
 function nextColumn(doc: jsPDF, cursor: Cursor, provincia: string): void {
@@ -146,19 +159,13 @@ function nextColumn(doc: jsPDF, cursor: Cursor, provincia: string): void {
     doc.addPage();
     cursor.col = 0;
     cursor.y = MARGIN_TOP;
-    drawHeader(doc, provincia);
+    drawHeader(doc, provincia, doc.getNumberOfPages());
   }
 }
 
 function drawEspHeader(doc: jsPDF, cursor: Cursor, esp: string, cont: boolean): void {
   const x = colX(cursor.col);
   const label = cont ? `${esp} (cont.)` : esp;
-
-  // Underline
-  doc.setDrawColor(...COLOR_ESP);
-  doc.setLineWidth(0.25);
-  doc.line(x, cursor.y, x + COL_W, cursor.y);
-  cursor.y += 1.5;
 
   doc.setFontSize(FS_ESPECIALIDAD);
   doc.setFont('helvetica', 'bold');
@@ -168,7 +175,7 @@ function drawEspHeader(doc: jsPDF, cursor: Cursor, esp: string, cont: boolean): 
     doc.text(line, x, cursor.y + FS_ESPECIALIDAD * 0.35);
     cursor.y += FS_ESPECIALIDAD * 0.38;
   }
-  cursor.y += 1.5;
+  cursor.y += 2.5;
 }
 
 function colX(col: number): number {
@@ -241,7 +248,7 @@ function generateProvince(section: ProvinciaSection): ArrayBuffer {
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
   const cursor: Cursor = { col: 0, y: MARGIN_TOP };
 
-  drawHeader(doc, section.nombre);
+  drawHeader(doc, section.nombre, 1);
 
   for (const esp of section.especialidades) {
     // Check if header + at least one prestador fits
