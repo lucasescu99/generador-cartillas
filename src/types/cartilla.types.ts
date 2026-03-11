@@ -37,7 +37,7 @@ export interface ParsedFile {
 }
 
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[] } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; normasText?: string } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };

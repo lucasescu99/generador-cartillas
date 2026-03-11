@@ -26,7 +26,7 @@ export function usePdfGenerator() {
   const workerRef = useRef<Worker | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const start = useCallback((prestadores: Prestador[]) => {
+  const start = useCallback((prestadores: Prestador[], normasText?: string | null) => {
     setStatus('generating');
     setProgress({ phase: 'generating', current: 0, total: 0, message: 'Iniciando...' });
     setMetadata(null);
@@ -59,12 +59,15 @@ export function usePdfGenerator() {
     };
 
     worker.onerror = () => {
-      setErrorMessage('Error inesperado en el proceso de generación');
+      setErrorMessage('Error inesperado en el proceso de generacion');
       setStatus('error');
       worker.terminate();
     };
 
-    worker.postMessage({ type: 'START', payload: { prestadores } } satisfies WorkerMessage);
+    worker.postMessage({
+      type: 'START',
+      payload: { prestadores, normasText: normasText || undefined },
+    } satisfies WorkerMessage);
   }, []);
 
   const download = useCallback((filename = 'cartilla-medica.pdf') => {

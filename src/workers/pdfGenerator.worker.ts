@@ -163,17 +163,6 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   doc.text(pageNumText, pageNumX, textY);
 }
 
-function nextColumn(doc: jsPDF, cursor: Cursor, provincia: string): void {
-  if (cursor.col < NUM_COLS - 1) {
-    cursor.col++;
-    cursor.y = MARGIN_TOP;
-  } else {
-    doc.addPage();
-    cursor.col = 0;
-    cursor.y = MARGIN_TOP;
-    drawHeader(doc, provincia, doc.getNumberOfPages());
-  }
-}
 
 function drawEspHeader(doc: jsPDF, cursor: Cursor, esp: string, cont: boolean): void {
   const x = colX(cursor.col);
@@ -254,18 +243,119 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
   cursor.y += 1.5;
 }
 
+// --- Generate "Normas Generales" pages ---
+
+const FS_NORMAS_BODY = 7;
+
+function drawNormasHeader(doc: jsPDF, pageNum: number): void {
+  const tabH = 5.5;
+  const tabY = 6;
+  const MIN_TAB_W = 28;
+  const tabPadX = 3;
+  const pageNumGap = 5.6;
+  const isRightSide = pageNum % 2 === 0;
+
+  doc.setFontSize(FS_HEADER_TAB);
+  doc.setFont('helvetica', 'normal');
+
+  const tabText = 'NORMAS GENERALES';
+  const tabW = Math.max(MIN_TAB_W, doc.getTextWidth(tabText) + tabPadX * 2);
+
+  const pageNumText = String(pageNum);
+  const pageNumW = doc.getTextWidth(pageNumText);
+
+  let tabX: number;
+  let pageNumX: number;
+
+  if (isRightSide) {
+    const rightEdge = PAGE_W - MARGIN_RIGHT;
+    pageNumX = rightEdge - pageNumW;
+    tabX = pageNumX - pageNumGap - tabW;
+  } else {
+    pageNumX = MARGIN_LEFT;
+    tabX = pageNumX + pageNumW + pageNumGap;
+  }
+
+  // Single tab (dark blue)
+  doc.setFillColor(...COLOR_HEADER_DARK);
+  doc.rect(tabX, tabY, tabW, tabH, 'F');
+
+  const textY = tabY + tabH / 2 + FS_HEADER_TAB * 0.13;
+  doc.setTextColor(...COLOR_WHITE);
+  doc.setFontSize(FS_HEADER_TAB);
+  const tw = doc.getTextWidth(tabText);
+  doc.text(tabText, tabX + (tabW - tw) / 2, textY);
+
+  // Page number
+  doc.setTextColor(...COLOR_TEXT);
+  doc.text(pageNumText, pageNumX, textY);
+}
+
+function generateNormas(text: string): ArrayBuffer {
+  const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+  const cursor: Cursor = { col: 0, y: MARGIN_TOP };
+  const textW = USABLE_W; // full width, no columns
+
+  drawNormasHeader(doc, 1);
+
+  doc.setFontSize(FS_NORMAS_BODY);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLOR_TEXT);
+
+  const paragraphs = text.split(/\n/);
+
+  for (const para of paragraphs) {
+    if (para.trim() === '') {
+      cursor.y += FS_NORMAS_BODY * 0.3;
+      continue;
+    }
+
+    const lines = wrapText(doc, para.trim(), textW);
+    const blockH = lines.length * (FS_NORMAS_BODY * 0.42);
+
+    if (cursor.y + blockH > PAGE_H - MARGIN_BOTTOM) {
+      doc.addPage();
+      cursor.y = MARGIN_TOP;
+      drawNormasHeader(doc, doc.getNumberOfPages());
+      doc.setFontSize(FS_NORMAS_BODY);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLOR_TEXT);
+    }
+
+    for (const line of lines) {
+      doc.text(line, MARGIN_LEFT, cursor.y + FS_NORMAS_BODY * 0.35);
+      cursor.y += FS_NORMAS_BODY * 0.42;
+    }
+  }
+
+  return doc.output('arraybuffer');
+}
+
 // --- Generate pages for a single province ---
 
-function generateProvince(section: ProvinciaSection): ArrayBuffer {
+function generateProvince(section: ProvinciaSection, startPage: number): ArrayBuffer {
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
   const cursor: Cursor = { col: 0, y: MARGIN_TOP };
 
-  drawHeader(doc, section.nombre, 1);
+  drawHeader(doc, section.nombre, startPage);
+
+  const getPageNum = () => startPage + doc.getNumberOfPages() - 1;
+
+  const nextCol = (cur: Cursor) => {
+    if (cur.col < NUM_COLS - 1) {
+      cur.col++;
+      cur.y = MARGIN_TOP;
+    } else {
+      doc.addPage();
+      cur.col = 0;
+      cur.y = MARGIN_TOP;
+      drawHeader(doc, section.nombre, getPageNum());
+    }
+  };
 
   for (const esp of section.especialidades) {
-    // Check if header + at least one prestador fits
     if (remaining(cursor) < 8) {
-      nextColumn(doc, cursor, section.nombre);
+      nextCol(cursor);
     }
 
     drawEspHeader(doc, cursor, esp.nombre, false);
@@ -273,7 +363,7 @@ function generateProvince(section: ProvinciaSection): ArrayBuffer {
     for (const prest of esp.prestadores) {
       const pH = measurePrestador(doc, prest);
       if (remaining(cursor) < pH) {
-        nextColumn(doc, cursor, section.nombre);
+        nextCol(cursor);
         drawEspHeader(doc, cursor, esp.nombre, true);
       }
       drawPrestador(doc, cursor, prest);
@@ -291,50 +381,77 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores } = e.data.payload;
+    const { prestadores, normasText } = e.data.payload;
     const sections = groupByProvincia(prestadores);
-    const totalSections = sections.length;
+    const hasNormas = !!normasText;
+    const totalSteps = sections.length + (hasNormas ? 1 : 0);
     const chunkBuffers: ArrayBuffer[] = [];
+    let currentPage = 1;
+    let stepIndex = 0;
 
-    // Phase 1: Generate PDF for each province
-    for (let i = 0; i < totalSections; i++) {
+    // Generate "Normas Generales" pages first
+    if (hasNormas) {
+      self.postMessage({
+        type: 'PROGRESS',
+        payload: {
+          phase: 'generating',
+          current: ++stepIndex,
+          total: totalSteps,
+          message: 'Generando: Normas Generales',
+        },
+      } satisfies WorkerMessage);
+
+      const normasBuffer = generateNormas(normasText!);
+      chunkBuffers.push(normasBuffer);
+      // Count pages in normas to offset province page numbers
+      const tempDoc = new jsPDF();
+      const loaded = await PDFDocument.load(normasBuffer);
+      currentPage += loaded.getPageCount();
+      void tempDoc;
+    }
+
+    // Generate PDF for each province with correct page offset
+    for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
 
       self.postMessage({
         type: 'PROGRESS',
         payload: {
           phase: 'generating',
-          current: i + 1,
-          total: totalSections,
+          current: ++stepIndex,
+          total: totalSteps,
           message: `Generando: ${section.nombre} (${section.especialidades.length} especialidades)`,
         },
       } satisfies WorkerMessage);
 
-      chunkBuffers.push(generateProvince(section));
+      const provBuffer = generateProvince(section, currentPage);
+      chunkBuffers.push(provBuffer);
+      const loaded = await PDFDocument.load(provBuffer);
+      currentPage += loaded.getPageCount();
     }
 
-    // Phase 2: Merge all province PDFs
+    // Phase 2: Merge all PDFs
     self.postMessage({
       type: 'PROGRESS',
       payload: {
         phase: 'merging',
         current: 0,
-        total: totalSections,
+        total: chunkBuffers.length,
         message: 'Preparando documento final...',
       },
     } satisfies WorkerMessage);
 
     const merged = await PDFDocument.create();
-    let pageOffset = 0;
 
     for (let i = 0; i < chunkBuffers.length; i++) {
+      const label = i === 0 && hasNormas ? 'Normas Generales' : sections[hasNormas ? i - 1 : i].nombre;
       self.postMessage({
         type: 'PROGRESS',
         payload: {
           phase: 'merging',
           current: i + 1,
-          total: totalSections,
-          message: `Uniendo ${sections[i].nombre}...`,
+          total: chunkBuffers.length,
+          message: `Uniendo ${label}...`,
         },
       } satisfies WorkerMessage);
 
@@ -343,7 +460,6 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       for (const page of pages) {
         merged.addPage(page);
       }
-      pageOffset += pages.length;
     }
 
     const pdfBytes = await merged.save();

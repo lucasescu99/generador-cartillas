@@ -7,11 +7,13 @@ interface CartillaState {
   parsedFile: ParsedFile | null;
   mapping: ColumnMapping | null;
   cartillaData: CartillaData | null;
+  normasText: string | null;
 }
 
 interface CartillaContextType extends CartillaState {
   setParsedFile: (file: ParsedFile) => void;
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
+  setNormasText: (text: string | null) => void;
   reset: () => void;
 }
 
@@ -19,6 +21,7 @@ const initial: CartillaState = {
   parsedFile: null,
   mapping: null,
   cartillaData: null,
+  normasText: null,
 };
 
 const CartillaContext = createContext<CartillaContextType | null>(null);
@@ -36,10 +39,14 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, mapping, cartillaData }));
   }, []);
 
+  const setNormasText = useCallback((normasText: string | null) => {
+    setState((prev) => ({ ...prev, normasText }));
+  }, []);
+
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasText, reset }}>
       {children}
     </CartillaContext.Provider>
   );

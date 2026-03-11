@@ -41,3 +41,80 @@
   background: var(--color-border);
   cursor: not-allowed;
 }
+
+/* TXT section */
+.txtSection {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.txtLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+
+.txtHint {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+}
+
+.txtBtn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.txtBtn:hover {
+  background: rgba(0, 124, 194, 0.05);
+}
+
+.txtBadge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.txtInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.txtName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.txtMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.txtRemoveBtn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.txtRemoveBtn:hover {
+  color: var(--color-text);
+}
