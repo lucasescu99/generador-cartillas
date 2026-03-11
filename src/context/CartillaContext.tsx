@@ -1,19 +1,19 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import type { ColumnMapping, ParsedFile, CartillaData } from '../types/cartilla.types';
+import type { ColumnMapping, ParsedFile, CartillaData, NormasBlock } from '../types/cartilla.types';
 import { transformRows, buildCartillaData } from '../services/dataTransformer.service';
 
 interface CartillaState {
   parsedFile: ParsedFile | null;
   mapping: ColumnMapping | null;
   cartillaData: CartillaData | null;
-  normasText: string | null;
+  normasBlocks: NormasBlock[] | null;
 }
 
 interface CartillaContextType extends CartillaState {
   setParsedFile: (file: ParsedFile) => void;
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
-  setNormasText: (text: string | null) => void;
+  setNormasBlocks: (blocks: NormasBlock[] | null) => void;
   reset: () => void;
 }
 
@@ -21,7 +21,7 @@ const initial: CartillaState = {
   parsedFile: null,
   mapping: null,
   cartillaData: null,
-  normasText: null,
+  normasBlocks: null,
 };
 
 const CartillaContext = createContext<CartillaContextType | null>(null);
@@ -39,14 +39,14 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, mapping, cartillaData }));
   }, []);
 
-  const setNormasText = useCallback((normasText: string | null) => {
-    setState((prev) => ({ ...prev, normasText }));
+  const setNormasBlocks = useCallback((normasBlocks: NormasBlock[] | null) => {
+    setState((prev) => ({ ...prev, normasBlocks }));
   }, []);
 
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasText, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasBlocks, reset }}>
       {children}
     </CartillaContext.Provider>
   );

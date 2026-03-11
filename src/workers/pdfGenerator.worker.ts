@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
-import type { Prestador, WorkerMessage } from '../types/cartilla.types';
+import type { Prestador, NormasBlock, NormasSpan, WorkerMessage } from '../types/cartilla.types';
 
 // --- Layout constants (mm) ---
 const PAGE_H = 297;
@@ -245,7 +245,12 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
 
 // --- Generate "Normas Generales" pages ---
 
+// Normas font sizes
+const FS_NORMAS_H1 = 11;
+const FS_NORMAS_H2 = 9;
+const FS_NORMAS_H3 = 8;
 const FS_NORMAS_BODY = 7;
+const FS_NORMAS_LIST = 6.5;
 
 function drawNormasHeader(doc: jsPDF, pageNum: number): void {
   const tabH = 5.5;
@@ -276,7 +281,6 @@ function drawNormasHeader(doc: jsPDF, pageNum: number): void {
     tabX = pageNumX + pageNumW + pageNumGap;
   }
 
-  // Single tab (dark blue)
   doc.setFillColor(...COLOR_HEADER_DARK);
   doc.rect(tabX, tabY, tabW, tabH, 'F');
 
@@ -286,46 +290,88 @@ function drawNormasHeader(doc: jsPDF, pageNum: number): void {
   const tw = doc.getTextWidth(tabText);
   doc.text(tabText, tabX + (tabW - tw) / 2, textY);
 
-  // Page number
   doc.setTextColor(...COLOR_TEXT);
   doc.text(pageNumText, pageNumX, textY);
 }
 
-function generateNormas(text: string): ArrayBuffer {
+function blockFontSize(block: NormasBlock): number {
+  if (block.type === 'heading') {
+    if (block.level === 1) return FS_NORMAS_H1;
+    if (block.level === 2) return FS_NORMAS_H2;
+    return FS_NORMAS_H3;
+  }
+  if (block.type === 'list-item') return FS_NORMAS_LIST;
+  return FS_NORMAS_BODY;
+}
+
+function spanText(spans: NormasSpan[]): string {
+  return spans.map((s) => s.text).join('');
+}
+
+function measureBlock(doc: jsPDF, block: NormasBlock, maxW: number): number {
+  const fs = blockFontSize(block);
+  doc.setFontSize(fs);
+  const text = spanText(block.spans);
+  if (!text.trim()) return fs * 0.3;
+  const prefix = block.type === 'list-item' ? '  - ' : '';
+  const lines = wrapText(doc, prefix + text, maxW);
+  return lines.length * (fs * 0.42) + (block.type === 'heading' ? 2 : 0.5);
+}
+
+function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): number {
+  const fs = blockFontSize(block);
+  const text = spanText(block.spans);
+
+  if (!text.trim()) return y + fs * 0.3;
+
+  // Determine dominant style from spans
+  const hasBold = block.type === 'heading' || block.spans.some((s) => s.bold);
+  const hasItalic = block.spans.some((s) => s.italic);
+
+  let fontStyle: string = 'normal';
+  if (hasBold && hasItalic) fontStyle = 'bolditalic';
+  else if (hasBold) fontStyle = 'bold';
+  else if (hasItalic) fontStyle = 'italic';
+
+  doc.setFontSize(fs);
+  doc.setFont('helvetica', fontStyle);
+
+  if (block.type === 'heading') {
+    doc.setTextColor(...COLOR_ESP);
+  } else {
+    doc.setTextColor(...COLOR_TEXT);
+  }
+
+  const prefix = block.type === 'list-item' ? '  - ' : '';
+  const lines = wrapText(doc, prefix + text, maxW);
+
+  for (const line of lines) {
+    doc.text(line, MARGIN_LEFT, y + fs * 0.35);
+    y += fs * 0.42;
+  }
+
+  if (block.type === 'heading') y += 1.5;
+
+  return y;
+}
+
+function generateNormas(blocks: NormasBlock[]): ArrayBuffer {
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-  const cursor: Cursor = { col: 0, y: MARGIN_TOP };
-  const textW = USABLE_W; // full width, no columns
+  let y = MARGIN_TOP;
+  const textW = USABLE_W;
 
   drawNormasHeader(doc, 1);
 
-  doc.setFontSize(FS_NORMAS_BODY);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLOR_TEXT);
+  for (const block of blocks) {
+    const blockH = measureBlock(doc, block, textW);
 
-  const paragraphs = text.split(/\n/);
-
-  for (const para of paragraphs) {
-    if (para.trim() === '') {
-      cursor.y += FS_NORMAS_BODY * 0.3;
-      continue;
-    }
-
-    const lines = wrapText(doc, para.trim(), textW);
-    const blockH = lines.length * (FS_NORMAS_BODY * 0.42);
-
-    if (cursor.y + blockH > PAGE_H - MARGIN_BOTTOM) {
+    if (y + blockH > PAGE_H - MARGIN_BOTTOM) {
       doc.addPage();
-      cursor.y = MARGIN_TOP;
+      y = MARGIN_TOP;
       drawNormasHeader(doc, doc.getNumberOfPages());
-      doc.setFontSize(FS_NORMAS_BODY);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...COLOR_TEXT);
     }
 
-    for (const line of lines) {
-      doc.text(line, MARGIN_LEFT, cursor.y + FS_NORMAS_BODY * 0.35);
-      cursor.y += FS_NORMAS_BODY * 0.42;
-    }
+    y = drawBlock(doc, y, block, textW);
   }
 
   return doc.output('arraybuffer');
@@ -381,9 +427,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores, normasText } = e.data.payload;
+    const { prestadores, normasBlocks } = e.data.payload;
     const sections = groupByProvincia(prestadores);
-    const hasNormas = !!normasText;
+    const hasNormas = normasBlocks && normasBlocks.length > 0;
     const totalSteps = sections.length + (hasNormas ? 1 : 0);
     const chunkBuffers: ArrayBuffer[] = [];
     let currentPage = 1;
@@ -401,13 +447,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         },
       } satisfies WorkerMessage);
 
-      const normasBuffer = generateNormas(normasText!);
+      const normasBuffer = generateNormas(normasBlocks!);
       chunkBuffers.push(normasBuffer);
-      // Count pages in normas to offset province page numbers
-      const tempDoc = new jsPDF();
       const loaded = await PDFDocument.load(normasBuffer);
       currentPage += loaded.getPageCount();
-      void tempDoc;
     }
 
     // Generate PDF for each province with correct page offset

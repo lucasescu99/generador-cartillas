@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import type { Prestador, WorkerMessage } from '../types/cartilla.types';
+import type { Prestador, NormasBlock, WorkerMessage } from '../types/cartilla.types';
 import PdfWorker from '../workers/pdfGenerator.worker?worker';
 
 export interface Progress {
@@ -26,7 +26,7 @@ export function usePdfGenerator() {
   const workerRef = useRef<Worker | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const start = useCallback((prestadores: Prestador[], normasText?: string | null) => {
+  const start = useCallback((prestadores: Prestador[], normasBlocks?: NormasBlock[] | null) => {
     setStatus('generating');
     setProgress({ phase: 'generating', current: 0, total: 0, message: 'Iniciando...' });
     setMetadata(null);
@@ -66,7 +66,7 @@ export function usePdfGenerator() {
 
     worker.postMessage({
       type: 'START',
-      payload: { prestadores, normasText: normasText || undefined },
+      payload: { prestadores, normasBlocks: normasBlocks || undefined },
     } satisfies WorkerMessage);
   }, []);
 

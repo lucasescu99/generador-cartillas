@@ -7,15 +7,15 @@ import styles from './GeneratePage.module.css';
 
 export function GeneratePage() {
   const navigate = useNavigate();
-  const { cartillaData, normasText, reset } = useCartilla();
+  const { cartillaData, normasBlocks, reset } = useCartilla();
   const { start, progress, status, download, metadata, errorMessage } = usePdfGenerator();
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current || !cartillaData || cartillaData.prestadores.length === 0) return;
     started.current = true;
-    start(cartillaData.prestadores, normasText);
-  }, [cartillaData, normasText, start]);
+    start(cartillaData.prestadores, normasBlocks);
+  }, [cartillaData, normasBlocks, start]);
 
   if (!cartillaData || cartillaData.prestadores.length === 0) {
     return <Navigate to="/" replace />;

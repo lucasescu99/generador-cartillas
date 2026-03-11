@@ -36,8 +36,21 @@ export interface ParsedFile {
   totalRows: number;
 }
 
+export interface NormasSpan {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+export interface NormasBlock {
+  type: 'heading' | 'paragraph' | 'list-item';
+  level?: number;
+  spans: NormasSpan[];
+}
+
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[]; normasText?: string } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; normasBlocks?: NormasBlock[] } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };

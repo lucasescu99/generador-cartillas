@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useCartilla } from '../../context/CartillaContext';
 import { useFileParser } from '../../hooks/useFileParser';
 import { FileDropzone } from '../../components/FileDropzone/FileDropzone';
+import { parseNormasFile } from '../../services/normasParser.service';
 import styles from './UploadPage.module.css';
 
 export function UploadPage() {
   const navigate = useNavigate();
-  const { setParsedFile, parsedFile, normasText, setNormasText, reset } = useCartilla();
+  const { setParsedFile, parsedFile, normasBlocks, setNormasBlocks, reset } = useCartilla();
   const { parse, result, isLoading, error, clearError } = useFileParser();
-  const txtInputRef = useRef<HTMLInputElement>(null);
-  const [txtFilename, setTxtFilename] = useState<string | null>(null);
+  const normasInputRef = useRef<HTMLInputElement>(null);
+  const [normasFilename, setNormasFilename] = useState<string | null>(null);
+  const [normasError, setNormasError] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     clearError();
@@ -28,22 +30,27 @@ export function UploadPage() {
     clearError();
   };
 
-  const handleTxtFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNormasFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setTxtFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setNormasText(ev.target?.result as string);
-    };
-    reader.readAsText(file, 'utf-8');
+    setNormasError(null);
+    try {
+      const blocks = await parseNormasFile(file);
+      setNormasBlocks(blocks);
+      setNormasFilename(file.name);
+    } catch (err) {
+      setNormasError(err instanceof Error ? err.message : 'Error al leer el archivo');
+    }
   };
 
-  const handleRemoveTxt = () => {
-    setNormasText(null);
-    setTxtFilename(null);
-    if (txtInputRef.current) txtInputRef.current.value = '';
+  const handleRemoveNormas = () => {
+    setNormasBlocks(null);
+    setNormasFilename(null);
+    setNormasError(null);
+    if (normasInputRef.current) normasInputRef.current.value = '';
   };
+
+  const normasCount = normasBlocks?.filter((b) => b.spans.some((s) => s.text.trim())).length ?? 0;
 
   return (
     <div className={styles.container}>
@@ -60,32 +67,34 @@ export function UploadPage() {
 
       <div className={styles.txtSection}>
         <p className={styles.txtLabel}>Normas Generales (opcional)</p>
-        <p className={styles.txtHint}>Archivo .txt que se incluira como primera seccion del PDF</p>
+        <p className={styles.txtHint}>Archivo .docx o .txt que se incluira como primera seccion del PDF</p>
 
-        {!normasText ? (
-          <button className={styles.txtBtn} onClick={() => txtInputRef.current?.click()}>
-            Seleccionar archivo .txt
+        {!normasBlocks ? (
+          <button className={styles.txtBtn} onClick={() => normasInputRef.current?.click()}>
+            Seleccionar archivo
           </button>
         ) : (
           <div className={styles.txtBadge}>
             <div className={styles.txtInfo}>
-              <span className={styles.txtName}>{txtFilename}</span>
+              <span className={styles.txtName}>{normasFilename}</span>
               <span className={styles.txtMeta}>
-                {normasText.length.toLocaleString()} caracteres
+                {normasCount} bloques de texto
               </span>
             </div>
-            <button className={styles.txtRemoveBtn} onClick={handleRemoveTxt} title="Quitar archivo">
+            <button className={styles.txtRemoveBtn} onClick={handleRemoveNormas} title="Quitar archivo">
               ✕
             </button>
           </div>
         )}
 
+        {normasError && <p className={styles.normasError}>{normasError}</p>}
+
         <input
-          ref={txtInputRef}
+          ref={normasInputRef}
           type="file"
-          accept=".txt"
+          accept=".txt,.docx"
           hidden
-          onChange={handleTxtFile}
+          onChange={handleNormasFile}
         />
       </div>
 
