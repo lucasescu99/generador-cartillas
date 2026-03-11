@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import type { Prestador, NormasBlock, NormasSpan, WorkerMessage } from '../types/cartilla.types';
 
 // --- Layout constants (mm) ---
@@ -421,6 +421,44 @@ function generateProvince(section: ProvinciaSection, startPage: number): ArrayBu
   return doc.output('arraybuffer');
 }
 
+// --- Cover page helpers ---
+
+async function fetchPdf(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  return res.arrayBuffer();
+}
+
+async function createProvinceCover(
+  templateBuffer: ArrayBuffer,
+  provinceName: string,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(templateBuffer);
+  const page = doc.getPages()[0];
+  const font = await doc.embedFont('Helvetica-Bold');
+
+  // Cover "TUCUMÁN" with white rect (position from PDF analysis: bbox y=367-401, x=60-170)
+  // pdf-lib uses bottom-left origin, PDF page height = 841.89pt
+  const pageH = 841.89;
+  const rectY = pageH - 401.5;
+  page.drawRectangle({
+    x: 55,
+    y: rectY,
+    width: 300,
+    height: 38,
+    color: rgb(1, 1, 1),
+  });
+
+  page.drawText(provinceName.toUpperCase(), {
+    x: 63.4,
+    y: pageH - 393,
+    size: 20,
+    font,
+    color: rgb(2 / 255, 54 / 255, 112 / 255), // #023670
+  });
+
+  return doc.save();
+}
+
 // --- Main worker entry ---
 
 self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
@@ -430,75 +468,87 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     const { prestadores, normasBlocks } = e.data.payload;
     const sections = groupByProvincia(prestadores);
     const hasNormas = normasBlocks && normasBlocks.length > 0;
-    const totalSteps = sections.length + (hasNormas ? 1 : 0);
-    const chunkBuffers: ArrayBuffer[] = [];
-    let currentPage = 1;
-    let stepIndex = 0;
 
-    // Generate "Normas Generales" pages first
+    // Fetch cover PDFs
+    const [normasCoverBuf, prestadoresCoverBuf, provinciaCoverBuf] = await Promise.all([
+      fetchPdf('/Caratula-NormasGenerales.pdf'),
+      fetchPdf('/Caratula-ProgramaMedicoAsistencial.pdf'),
+      fetchPdf('/Caratula-Integra4_provincias.pdf'),
+    ]);
+
+    // We'll build an ordered list of PDF buffers to merge
+    const parts: { label: string; buffer: ArrayBuffer | Uint8Array }[] = [];
+    // Cover pages don't count in page numbering for content headers
+    // We track contentPage separately (covers are unnumbered)
+    let currentPage = 1;
+
+    // 1. Normas section
     if (hasNormas) {
       self.postMessage({
         type: 'PROGRESS',
-        payload: {
-          phase: 'generating',
-          current: ++stepIndex,
-          total: totalSteps,
-          message: 'Generando: Normas Generales',
-        },
+        payload: { phase: 'generating', current: 1, total: sections.length + 1, message: 'Generando: Normas Generales' },
       } satisfies WorkerMessage);
 
+      // Normas cover
+      parts.push({ label: 'Carátula Normas', buffer: normasCoverBuf });
+
+      // Normas content
       const normasBuffer = generateNormas(normasBlocks!);
-      chunkBuffers.push(normasBuffer);
+      parts.push({ label: 'Normas Generales', buffer: normasBuffer });
       const loaded = await PDFDocument.load(normasBuffer);
       currentPage += loaded.getPageCount();
     }
 
-    // Generate PDF for each province with correct page offset
+    // 2. Prestadores cover
+    parts.push({ label: 'Carátula Prestadores', buffer: prestadoresCoverBuf });
+
+    // 3. Each province: cover + content
+    const totalSteps = sections.length + (hasNormas ? 1 : 0);
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
+      const stepNum = (hasNormas ? 2 : 1) + i;
 
       self.postMessage({
         type: 'PROGRESS',
         payload: {
           phase: 'generating',
-          current: ++stepIndex,
+          current: stepNum,
           total: totalSteps,
           message: `Generando: ${section.nombre} (${section.especialidades.length} especialidades)`,
         },
       } satisfies WorkerMessage);
 
+      // Province cover with dynamic name
+      const provCoverBytes = await createProvinceCover(provinciaCoverBuf, section.nombre);
+      parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBytes });
+
+      // Province content
       const provBuffer = generateProvince(section, currentPage);
-      chunkBuffers.push(provBuffer);
+      parts.push({ label: section.nombre, buffer: provBuffer });
       const loaded = await PDFDocument.load(provBuffer);
       currentPage += loaded.getPageCount();
     }
 
-    // Phase 2: Merge all PDFs
+    // Phase 2: Merge all parts
     self.postMessage({
       type: 'PROGRESS',
-      payload: {
-        phase: 'merging',
-        current: 0,
-        total: chunkBuffers.length,
-        message: 'Preparando documento final...',
-      },
+      payload: { phase: 'merging', current: 0, total: parts.length, message: 'Preparando documento final...' },
     } satisfies WorkerMessage);
 
     const merged = await PDFDocument.create();
 
-    for (let i = 0; i < chunkBuffers.length; i++) {
-      const label = i === 0 && hasNormas ? 'Normas Generales' : sections[hasNormas ? i - 1 : i].nombre;
+    for (let i = 0; i < parts.length; i++) {
       self.postMessage({
         type: 'PROGRESS',
         payload: {
           phase: 'merging',
           current: i + 1,
-          total: chunkBuffers.length,
-          message: `Uniendo ${label}...`,
+          total: parts.length,
+          message: `Uniendo ${parts[i].label}...`,
         },
       } satisfies WorkerMessage);
 
-      const chunkDoc = await PDFDocument.load(chunkBuffers[i]);
+      const chunkDoc = await PDFDocument.load(parts[i].buffer);
       const pages = await merged.copyPages(chunkDoc, chunkDoc.getPageIndices());
       for (const page of pages) {
         merged.addPage(page);
