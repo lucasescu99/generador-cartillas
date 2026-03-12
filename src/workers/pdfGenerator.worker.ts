@@ -423,9 +423,18 @@ function generateProvince(section: ProvinciaSection, startPage: number): ArrayBu
 
 // --- Cover page helpers ---
 
-async function fetchPdf(url: string): Promise<ArrayBuffer> {
+async function fetchBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
   return res.arrayBuffer();
+}
+
+let poppinsFontBytes: ArrayBuffer | null = null;
+
+async function getPoppinsFont(): Promise<ArrayBuffer> {
+  if (!poppinsFontBytes) {
+    poppinsFontBytes = await fetchBuffer('/Poppins-SemiBold.ttf');
+  }
+  return poppinsFontBytes;
 }
 
 async function createProvinceCover(
@@ -434,20 +443,25 @@ async function createProvinceCover(
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(templateBuffer);
   const page = doc.getPages()[0];
-  const font = await doc.embedFont('Helvetica-Bold');
 
-  // Cover "TUCUMÁN" with white rect (position from PDF analysis: bbox y=367-401, x=60-170)
-  // pdf-lib uses bottom-left origin, PDF page height = 841.89pt
+  // Embed Poppins-SemiBold (same font as original template)
+  const fontBytes = await getPoppinsFont();
+  const font = await doc.embedFont(fontBytes);
+
+  // Cover "TUCUMÁN" with white rect
+  // Original bbox: x=63-165, y=367-401 (top-left coords)
+  // pdf-lib uses bottom-left origin, page height = 841.89pt
   const pageH = 841.89;
-  const rectY = pageH - 401.5;
   page.drawRectangle({
     x: 55,
-    y: rectY,
-    width: 300,
-    height: 38,
+    y: pageH - 405,
+    width: 350,
+    height: 42,
     color: rgb(1, 1, 1),
   });
 
+  // Draw province name at original position
+  // Original: origin (63.4, 389.5) top-left → bottom-left y = 841.89 - 389.5
   page.drawText(provinceName.toUpperCase(), {
     x: 63.4,
     y: pageH - 393,
@@ -471,9 +485,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
     // Fetch cover PDFs
     const [normasCoverBuf, prestadoresCoverBuf, provinciaCoverBuf] = await Promise.all([
-      fetchPdf('/Caratula-NormasGenerales.pdf'),
-      fetchPdf('/Caratula-ProgramaMedicoAsistencial.pdf'),
-      fetchPdf('/Caratula-Integra4_provincias.pdf'),
+      fetchBuffer('/Caratula-NormasGenerales.pdf'),
+      fetchBuffer('/Caratula-ProgramaMedicoAsistencial.pdf'),
+      fetchBuffer('/Caratula-Integra4_provincias.pdf'),
     ]);
 
     // We'll build an ordered list of PDF buffers to merge
