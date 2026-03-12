@@ -1,5 +1,8 @@
 import { jsPDF } from 'jspdf';
 import { PDFDocument, rgb } from 'pdf-lib';
+// @ts-ignore fontkit CJS/ESM interop
+import _fontkit from '@pdf-lib/fontkit';
+const fontkit: any = (_fontkit as any).default || _fontkit;
 import type { Prestador, NormasBlock, NormasSpan, WorkerMessage } from '../types/cartilla.types';
 
 // --- Layout constants (mm) ---
@@ -21,12 +24,12 @@ const FS_ESPECIALIDAD = 7;
 const FS_NOMBRE = 6;
 const FS_DETALLE = 5.5;
 
-// Colors from reference PDF
-const COLOR_HEADER_DARK: [number, number, number] = [18, 56, 127];   // #12387f
+// Colors
+const COLOR_HEADER_DARK: [number, number, number] = [2, 54, 112];    // #023670
 const COLOR_HEADER_LIGHT: [number, number, number] = [0, 124, 194];  // #007cc2
-const COLOR_ESP: [number, number, number] = [0, 125, 195];           // #007dc3
-const COLOR_TEXT: [number, number, number] = [18, 57, 128];          // #123980
-const COLOR_CENTRO: [number, number, number] = [0, 125, 195];        // #007dc3
+const COLOR_ESP: [number, number, number] = [0, 124, 194];           // #007cc2
+const COLOR_TEXT: [number, number, number] = [2, 54, 112];           // #023670
+const COLOR_CENTRO: [number, number, number] = [2, 54, 112];         // #023670
 const COLOR_WHITE: [number, number, number] = [255, 255, 255];
 
 // --- Types ---
@@ -400,7 +403,9 @@ function generateProvince(section: ProvinciaSection, startPage: number): ArrayBu
   };
 
   for (const esp of section.especialidades) {
-    if (remaining(cursor) < 8) {
+    // Ensure room for header + at least the first prestador
+    const firstPH = esp.prestadores.length > 0 ? measurePrestador(doc, esp.prestadores[0]) : 0;
+    if (remaining(cursor) < 8 + firstPH) {
       nextCol(cursor);
     }
 
@@ -487,6 +492,7 @@ async function createProvinceCover(
   provinceName: string,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(templateBuffer);
+  doc.registerFontkit(fontkit);
   const page = doc.getPages()[0];
 
   // Embed Poppins-SemiBold (same font as original template)
@@ -560,10 +566,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       currentPage += loaded.getPageCount();
     }
 
-    // 2. Prestadores cover
-    parts.push({ label: 'Carátula Prestadores', buffer: prestadoresCoverBuf });
-
-    // 3. Each province: cover + content
+    // 2. Each province: province cover + prestadores cover + content
     const totalSteps = sections.length + (hasNormas ? 1 : 0);
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
@@ -582,6 +585,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // Province cover with dynamic name
       const provCoverBytes = await createProvinceCover(provinciaCoverBuf, section.nombre);
       parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBytes });
+
+      // Prestadores cover
+      parts.push({ label: 'Carátula Prestadores', buffer: prestadoresCoverBuf });
 
       // Province content
       const provBuffer = generateProvince(section, currentPage);
