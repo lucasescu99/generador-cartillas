@@ -8,12 +8,14 @@ interface CartillaState {
   mapping: ColumnMapping | null;
   cartillaData: CartillaData | null;
   normasBlocks: NormasBlock[] | null;
+  programaBlocks: NormasBlock[] | null;
 }
 
 interface CartillaContextType extends CartillaState {
   setParsedFile: (file: ParsedFile) => void;
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
   setNormasBlocks: (blocks: NormasBlock[] | null) => void;
+  setProgramaBlocks: (blocks: NormasBlock[] | null) => void;
   reset: () => void;
 }
 
@@ -22,6 +24,7 @@ const initial: CartillaState = {
   mapping: null,
   cartillaData: null,
   normasBlocks: null,
+  programaBlocks: null,
 };
 
 const CartillaContext = createContext<CartillaContextType | null>(null);
@@ -43,10 +46,14 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, normasBlocks }));
   }, []);
 
+  const setProgramaBlocks = useCallback((programaBlocks: NormasBlock[] | null) => {
+    setState((prev) => ({ ...prev, programaBlocks }));
+  }, []);
+
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasBlocks, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasBlocks, setProgramaBlocks, reset }}>
       {children}
     </CartillaContext.Provider>
   );

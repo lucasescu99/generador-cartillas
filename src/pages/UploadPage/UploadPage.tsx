@@ -8,11 +8,14 @@ import styles from './UploadPage.module.css';
 
 export function UploadPage() {
   const navigate = useNavigate();
-  const { setParsedFile, parsedFile, normasBlocks, setNormasBlocks, reset } = useCartilla();
+  const { setParsedFile, parsedFile, normasBlocks, setNormasBlocks, programaBlocks, setProgramaBlocks, reset } = useCartilla();
   const { parse, result, isLoading, error, clearError } = useFileParser();
   const normasInputRef = useRef<HTMLInputElement>(null);
   const [normasFilename, setNormasFilename] = useState<string | null>(null);
   const [normasError, setNormasError] = useState<string | null>(null);
+  const programaInputRef = useRef<HTMLInputElement>(null);
+  const [programaFilename, setProgramaFilename] = useState<string | null>(null);
+  const [programaError, setProgramaError] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     clearError();
@@ -50,7 +53,28 @@ export function UploadPage() {
     if (normasInputRef.current) normasInputRef.current.value = '';
   };
 
+  const handleProgramaFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProgramaError(null);
+    try {
+      const blocks = await parseNormasFile(file);
+      setProgramaBlocks(blocks);
+      setProgramaFilename(file.name);
+    } catch (err) {
+      setProgramaError(err instanceof Error ? err.message : 'Error al leer el archivo');
+    }
+  };
+
+  const handleRemovePrograma = () => {
+    setProgramaBlocks(null);
+    setProgramaFilename(null);
+    setProgramaError(null);
+    if (programaInputRef.current) programaInputRef.current.value = '';
+  };
+
   const normasCount = normasBlocks?.filter((b) => b.spans.some((s) => s.text.trim())).length ?? 0;
+  const programaCount = programaBlocks?.filter((b) => b.spans.some((s) => s.text.trim())).length ?? 0;
 
   return (
     <div className={styles.container}>
@@ -95,6 +119,39 @@ export function UploadPage() {
           accept=".txt,.docx"
           hidden
           onChange={handleNormasFile}
+        />
+      </div>
+
+      <div className={styles.txtSection}>
+        <p className={styles.txtLabel}>Programa Medico Asistencial (opcional)</p>
+        <p className={styles.txtHint}>Archivo .docx o .txt con el contenido del programa medico asistencial</p>
+
+        {!programaBlocks ? (
+          <button className={styles.txtBtn} onClick={() => programaInputRef.current?.click()}>
+            Seleccionar archivo
+          </button>
+        ) : (
+          <div className={styles.txtBadge}>
+            <div className={styles.txtInfo}>
+              <span className={styles.txtName}>{programaFilename}</span>
+              <span className={styles.txtMeta}>
+                {programaCount} bloques de texto
+              </span>
+            </div>
+            <button className={styles.txtRemoveBtn} onClick={handleRemovePrograma} title="Quitar archivo">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {programaError && <p className={styles.normasError}>{programaError}</p>}
+
+        <input
+          ref={programaInputRef}
+          type="file"
+          accept=".txt,.docx"
+          hidden
+          onChange={handleProgramaFile}
         />
       </div>
 

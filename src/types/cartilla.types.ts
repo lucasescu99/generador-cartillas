@@ -41,16 +41,24 @@ export interface NormasSpan {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  link?: string;
+}
+
+export interface TableCell {
+  text: string;
+  bold?: boolean;
 }
 
 export interface NormasBlock {
-  type: 'heading' | 'paragraph' | 'list-item';
+  type: 'heading' | 'paragraph' | 'list-item' | 'table-row';
   level?: number;
   spans: NormasSpan[];
+  cells?: TableCell[];
+  tableFlags?: { isHeader: boolean; isFirst: boolean; isLast: boolean };
 }
 
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[]; normasBlocks?: NormasBlock[] } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; normasBlocks?: NormasBlock[]; programaBlocks?: NormasBlock[] } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };
