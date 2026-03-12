@@ -110,7 +110,7 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   const isRightSide = pageNum % 2 === 0; // even = right, odd = left
 
   doc.setFontSize(FS_HEADER_TAB);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Poppins', 'normal');
 
   const provText = provincia.toUpperCase();
   const provTabW = Math.max(MIN_TAB_W, doc.getTextWidth(provText) + tabPadX * 2);
@@ -169,7 +169,7 @@ function drawEspHeader(doc: jsPDF, cursor: Cursor, esp: string, cont: boolean): 
   const label = cont ? `${esp} (cont.)` : esp;
 
   doc.setFontSize(FS_ESPECIALIDAD);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Poppins', 'bold');
   doc.setTextColor(...COLOR_ESP);
 
   for (const line of wrapText(doc, label, COL_W)) {
@@ -209,7 +209,7 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
 
   // Name
   doc.setFontSize(FS_NOMBRE);
-  doc.setFont('helvetica', centro ? 'bold' : 'normal');
+  doc.setFont('Poppins', centro ? 'bold' : 'normal');
   doc.setTextColor(...(centro ? COLOR_CENTRO : COLOR_TEXT));
 
   const nombreText = p.nombreInsti ? `${p.nombre} (${p.nombreInsti})` : p.nombre;
@@ -220,7 +220,7 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
 
   // Address
   doc.setFontSize(FS_DETALLE);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Poppins', 'normal');
   doc.setTextColor(...COLOR_TEXT);
 
   if (p.direccion) {
@@ -232,7 +232,7 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
 
   // Subespecialidades
   if (p.subespecialidades.length > 0) {
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('Poppins', 'italic');
     const subsText = p.subespecialidades.join(' - ');
     for (const line of wrapText(doc, subsText, textW)) {
       doc.text(line, x, cursor.y + FS_DETALLE * 0.35);
@@ -261,7 +261,7 @@ function drawNormasHeader(doc: jsPDF, pageNum: number): void {
   const isRightSide = pageNum % 2 === 0;
 
   doc.setFontSize(FS_HEADER_TAB);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Poppins', 'normal');
 
   const tabText = 'NORMAS GENERALES';
   const tabW = Math.max(MIN_TAB_W, doc.getTextWidth(tabText) + tabPadX * 2);
@@ -334,7 +334,7 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
   else if (hasItalic) fontStyle = 'italic';
 
   doc.setFontSize(fs);
-  doc.setFont('helvetica', fontStyle);
+  doc.setFont('Poppins', fontStyle);
 
   if (block.type === 'heading') {
     doc.setTextColor(...COLOR_ESP);
@@ -356,7 +356,7 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
 }
 
 function generateNormas(blocks: NormasBlock[]): ArrayBuffer {
-  const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+  const doc = createContentDoc();
   let y = MARGIN_TOP;
   const textW = USABLE_W;
 
@@ -380,7 +380,7 @@ function generateNormas(blocks: NormasBlock[]): ArrayBuffer {
 // --- Generate pages for a single province ---
 
 function generateProvince(section: ProvinciaSection, startPage: number): ArrayBuffer {
-  const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+  const doc = createContentDoc();
   const cursor: Cursor = { col: 0, y: MARGIN_TOP };
 
   drawHeader(doc, section.nombre, startPage);
@@ -421,21 +421,66 @@ function generateProvince(section: ProvinciaSection, startPage: number): ArrayBu
   return doc.output('arraybuffer');
 }
 
-// --- Cover page helpers ---
+// --- Font helpers ---
 
 async function fetchBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
   return res.arrayBuffer();
 }
 
-let poppinsFontBytes: ArrayBuffer | null = null;
-
-async function getPoppinsFont(): Promise<ArrayBuffer> {
-  if (!poppinsFontBytes) {
-    poppinsFontBytes = await fetchBuffer('/Poppins-SemiBold.ttf');
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
-  return poppinsFontBytes;
+  return btoa(binary);
 }
+
+// Cached font data (base64 for jsPDF, raw for pdf-lib)
+let fontsReady = false;
+let fontRegularB64 = '';
+let fontBoldB64 = '';
+let fontItalicB64 = '';
+let fontBoldItalicB64 = '';
+let poppinsSemiBoldRaw: ArrayBuffer;
+
+async function loadFonts(): Promise<void> {
+  if (fontsReady) return;
+  const [regular, bold, italic, boldItalic] = await Promise.all([
+    fetchBuffer('/Poppins-Regular.ttf'),
+    fetchBuffer('/Poppins-SemiBold.ttf'),
+    fetchBuffer('/Poppins-Italic.ttf'),
+    fetchBuffer('/Poppins-SemiBoldItalic.ttf'),
+  ]);
+  fontRegularB64 = arrayBufferToBase64(regular);
+  fontBoldB64 = arrayBufferToBase64(bold);
+  fontItalicB64 = arrayBufferToBase64(italic);
+  fontBoldItalicB64 = arrayBufferToBase64(boldItalic);
+  poppinsSemiBoldRaw = bold;
+  fontsReady = true;
+}
+
+function createContentDoc(): jsPDF {
+  const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+
+  doc.addFileToVFS('Poppins-Regular.ttf', fontRegularB64);
+  doc.addFont('Poppins-Regular.ttf', 'Poppins', 'normal');
+
+  doc.addFileToVFS('Poppins-SemiBold.ttf', fontBoldB64);
+  doc.addFont('Poppins-SemiBold.ttf', 'Poppins', 'bold');
+
+  doc.addFileToVFS('Poppins-Italic.ttf', fontItalicB64);
+  doc.addFont('Poppins-Italic.ttf', 'Poppins', 'italic');
+
+  doc.addFileToVFS('Poppins-SemiBoldItalic.ttf', fontBoldItalicB64);
+  doc.addFont('Poppins-SemiBoldItalic.ttf', 'Poppins', 'bolditalic');
+
+  doc.setFont('Poppins');
+  return doc;
+}
+
+// --- Cover page helpers ---
 
 async function createProvinceCover(
   templateBuffer: ArrayBuffer,
@@ -445,8 +490,7 @@ async function createProvinceCover(
   const page = doc.getPages()[0];
 
   // Embed Poppins-SemiBold (same font as original template)
-  const fontBytes = await getPoppinsFont();
-  const font = await doc.embedFont(fontBytes);
+  const font = await doc.embedFont(poppinsSemiBoldRaw);
 
   // Cover "TUCUMÁN" with white rect
   // Original bbox: x=63-165, y=367-401 (top-left coords)
@@ -482,6 +526,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     const { prestadores, normasBlocks } = e.data.payload;
     const sections = groupByProvincia(prestadores);
     const hasNormas = normasBlocks && normasBlocks.length > 0;
+
+    // Load fonts (cached after first call)
+    await loadFonts();
 
     // Fetch cover PDFs
     const [normasCoverBuf, prestadoresCoverBuf, provinciaCoverBuf] = await Promise.all([
