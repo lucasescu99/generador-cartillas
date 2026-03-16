@@ -477,7 +477,6 @@ function drawTableRow(doc: jsPDF, y: number, block: NormasBlock, maxW: number): 
   const tableRight = MARGIN_LEFT + maxW;
   const dividerX = tableX + maxW * TABLE_COL_RATIO;
   const leftTextX = tableX + TABLE_PAD_X;
-  const rightTextX = dividerX + TABLE_PAD_X;
   const leftW = maxW * TABLE_COL_RATIO - TABLE_PAD_X * 2;
   const rightW = maxW * (1 - TABLE_COL_RATIO) - TABLE_PAD_X * 2;
 
@@ -632,24 +631,7 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
     // For each wrapped line, render segments with correct styling
     let charIdx = 0;
     for (const line of lines) {
-      let x = MARGIN_LEFT;
-      let lineCharsLeft = line.length;
-
-      for (const seg of segments) {
-        if (lineCharsLeft <= 0) break;
-        if (charIdx >= seg.text.length + charIdx) continue; // skip consumed
-
-        // How many chars of this segment fall on this line
-        const segRemaining = seg.text.length - Math.max(0, charIdx - segments.slice(0, segments.indexOf(seg)).reduce((a, s) => a + s.text.length, 0));
-        if (segRemaining <= 0) continue;
-
-        const charsOnLine = Math.min(segRemaining, lineCharsLeft);
-        // Actually, this approach gets complex. Use simpler method:
-        // Just find the segment that contains the link text and render it differently
-        break;
-      }
-
-      // Simplified: render line, then overlay links
+      // Render line, then overlay links
       doc.setFont(NORMAS_FONT, baseStyle);
       doc.setTextColor(...COLOR_TEXT);
       doc.text(line, MARGIN_LEFT, y + fs * 0.35);
