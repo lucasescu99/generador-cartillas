@@ -22,7 +22,7 @@ export function MappingPage() {
   const handleContinue = () => {
     if (!isValid) return;
     applyMapping(mapping as ColumnMapping, parsedFile.rows);
-    navigate('/preview');
+    navigate('/order');
   };
 
   return (

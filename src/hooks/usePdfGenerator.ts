@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Prestador, NormasBlock, WorkerMessage } from '../types/cartilla.types';
 import PdfWorker from '../workers/pdfGenerator.worker?worker';
 
@@ -22,15 +22,24 @@ export function usePdfGenerator() {
   const [progress, setProgress] = useState<Progress>({ phase: 'generating', current: 0, total: 0, message: '' });
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const blobRef = useRef<Blob | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const start = useCallback((prestadores: Prestador[], normasBlocks?: NormasBlock[] | null, programaBlocks?: NormasBlock[] | null) => {
+  // Revoke old blob URL on cleanup or when a new one is created
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
+
+  const start = useCallback((prestadores: Prestador[], textBlocks?: NormasBlock[] | null, provinciaOrder?: string[], rubroOrder?: string[]) => {
     setStatus('generating');
     setProgress({ phase: 'generating', current: 0, total: 0, message: 'Iniciando...' });
     setMetadata(null);
     setErrorMessage(null);
+    setPdfUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     blobRef.current = null;
     startTimeRef.current = Date.now();
 
@@ -44,6 +53,7 @@ export function usePdfGenerator() {
         setProgress(msg.payload);
       } else if (msg.type === 'COMPLETE') {
         blobRef.current = msg.payload.blob;
+        setPdfUrl(URL.createObjectURL(msg.payload.blob));
         setMetadata({
           pageCount: msg.payload.pageCount,
           sizeKb: msg.payload.sizeKb,
@@ -66,7 +76,12 @@ export function usePdfGenerator() {
 
     worker.postMessage({
       type: 'START',
-      payload: { prestadores, normasBlocks: normasBlocks || undefined, programaBlocks: programaBlocks || undefined },
+      payload: {
+        prestadores,
+        textBlocks: textBlocks || undefined,
+        provinciaOrder: provinciaOrder || undefined,
+        rubroOrder: rubroOrder || undefined,
+      },
     } satisfies WorkerMessage);
   }, []);
 
@@ -85,5 +100,5 @@ export function usePdfGenerator() {
     setStatus('idle');
   }, []);
 
-  return { start, progress, status, download, metadata, errorMessage, cancel };
+  return { start, progress, status, download, metadata, errorMessage, cancel, pdfUrl };
 }

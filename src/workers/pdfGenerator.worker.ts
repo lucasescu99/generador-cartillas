@@ -19,10 +19,10 @@ const COL_W = (USABLE_W - COL_GAP * (NUM_COLS - 1)) / NUM_COLS;
 const CONTENT_H = PAGE_H - MARGIN_TOP - MARGIN_BOTTOM;
 
 // Font sizes (pt)
-const FS_HEADER_TAB = 7;
-const FS_ESPECIALIDAD = 7;
-const FS_NOMBRE = 6;
-const FS_DETALLE = 5.5;
+const FS_HEADER_TAB = 8;
+const FS_ESPECIALIDAD = 8;
+const FS_NOMBRE = 7;
+const FS_DETALLE = 6.5;
 
 // Colors
 const COLOR_HEADER_DARK: [number, number, number] = [2, 54, 112];    // #023670
@@ -44,14 +44,28 @@ interface EspGroup {
   prestadores: Prestador[];
 }
 
-interface ProvinciaSection {
+interface LocalidadGroup {
   nombre: string;
   especialidades: EspGroup[];
 }
 
-// --- Data grouping: provincia → especialidad → prestadores ---
+interface RubroSection {
+  nombre: string;
+  localidades: LocalidadGroup[];
+}
 
-function groupByProvincia(prestadores: Prestador[]): ProvinciaSection[] {
+interface ProvinciaSection {
+  nombre: string;
+  rubros: RubroSection[];
+}
+
+// --- Data grouping: provincia → rubro → localidad → especialidad → prestadores ---
+
+function groupByProvincia(
+  prestadores: Prestador[],
+  provinciaOrder?: string[],
+  rubroOrder?: string[],
+): ProvinciaSection[] {
   const provMap = new Map<string, Prestador[]>();
 
   for (const p of prestadores) {
@@ -60,35 +74,75 @@ function groupByProvincia(prestadores: Prestador[]): ProvinciaSection[] {
     provMap.get(prov)!.push(p);
   }
 
+  const sortedProvs = provinciaOrder && provinciaOrder.length > 0
+    ? provinciaOrder.filter((p) => provMap.has(p))
+    : Array.from(provMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
   const sections: ProvinciaSection[] = [];
-  const sortedProvs = Array.from(provMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
   for (const provNombre of sortedProvs) {
     const provPrestadores = provMap.get(provNombre)!;
 
-    // Group by especialidad within this province
-    const espMap = new Map<string, Prestador[]>();
+    // Group by rubro
+    const rubroMap = new Map<string, Prestador[]>();
     for (const p of provPrestadores) {
-      const esp = p.especialidad.toUpperCase().trim();
-      if (!espMap.has(esp)) espMap.set(esp, []);
-      espMap.get(esp)!.push(p);
+      const rubro = p.rubro.toUpperCase().trim();
+      if (!rubroMap.has(rubro)) rubroMap.set(rubro, []);
+      rubroMap.get(rubro)!.push(p);
     }
 
-    const especialidades: EspGroup[] = [];
-    const sortedEsps = Array.from(espMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+    const sortedRubros = rubroOrder && rubroOrder.length > 0
+      ? rubroOrder.filter((r) => rubroMap.has(r))
+      : Array.from(rubroMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
-    for (const espNombre of sortedEsps) {
-      const list = espMap.get(espNombre)!;
-      list.sort((a, b) => {
-        const aCentro = isCentroMedicus(a) ? 0 : 1;
-        const bCentro = isCentroMedicus(b) ? 0 : 1;
-        if (aCentro !== bCentro) return aCentro - bCentro;
-        return a.nombre.localeCompare(b.nombre, 'es');
-      });
-      especialidades.push({ nombre: espNombre, prestadores: list });
+    const rubros: RubroSection[] = [];
+
+    for (const rubroNombre of sortedRubros) {
+      const rubroPrestadores = rubroMap.get(rubroNombre)!;
+
+      // Group by localidad
+      const locMap = new Map<string, Prestador[]>();
+      for (const p of rubroPrestadores) {
+        const loc = (p.localidad || 'SIN LOCALIDAD').trim().toUpperCase();
+        if (!locMap.has(loc)) locMap.set(loc, []);
+        locMap.get(loc)!.push(p);
+      }
+
+      const sortedLocs = Array.from(locMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+      const localidades: LocalidadGroup[] = [];
+
+      for (const locNombre of sortedLocs) {
+        const locPrestadores = locMap.get(locNombre)!;
+
+        // Group by especialidad within this localidad
+        const espMap = new Map<string, Prestador[]>();
+        for (const p of locPrestadores) {
+          const esp = p.especialidad.toUpperCase().trim();
+          if (!espMap.has(esp)) espMap.set(esp, []);
+          espMap.get(esp)!.push(p);
+        }
+
+        const especialidades: EspGroup[] = [];
+        const sortedEsps = Array.from(espMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+        for (const espNombre of sortedEsps) {
+          const list = espMap.get(espNombre)!;
+          list.sort((a, b) => {
+            const aCentro = isCentroMedicus(a) ? 0 : 1;
+            const bCentro = isCentroMedicus(b) ? 0 : 1;
+            if (aCentro !== bCentro) return aCentro - bCentro;
+            return a.nombre.localeCompare(b.nombre, 'es');
+          });
+          especialidades.push({ nombre: espNombre, prestadores: list });
+        }
+
+        localidades.push({ nombre: locNombre, especialidades });
+      }
+
+      rubros.push({ nombre: rubroNombre, localidades });
     }
 
-    sections.push({ nombre: provNombre, especialidades });
+    sections.push({ nombre: provNombre, rubros });
   }
 
   return sections;
@@ -109,13 +163,13 @@ function remaining(cursor: Cursor): number {
 
 // --- Drawing functions ---
 
-function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
+function drawHeader(doc: jsPDF, provincia: string, rubro: string, pageNum: number): void {
   const tabH = 5.5;
   const tabY = 6;
   const MIN_TAB_W = 28;
   const tabPadX = 3;
   const pageNumGap = 5.6;
-  const isRightSide = pageNum % 2 === 0; // even = right, odd = left
+  const isRightSide = pageNum % 2 !== 0; // odd = right, even = left
 
   doc.setFontSize(FS_HEADER_TAB);
   doc.setFont('Poppins', 'normal');
@@ -123,7 +177,7 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
   const provText = provincia.toUpperCase();
   const provTabW = Math.max(MIN_TAB_W, doc.getTextWidth(provText) + tabPadX * 2);
 
-  const secText = 'CUERPO MEDICO';
+  const secText = rubro.toUpperCase();
   const secTabW = Math.max(MIN_TAB_W, doc.getTextWidth(secText) + tabPadX * 2);
 
   const pageNumText = String(pageNum);
@@ -172,6 +226,40 @@ function drawHeader(doc: jsPDF, provincia: string, pageNum: number): void {
 }
 
 
+// --- Localidad header: full-width dark blue text with centered line ---
+const FS_LOCALIDAD = 7;
+const LOCALIDAD_LINE_W = 0.3;
+const LOCALIDAD_GAP_AFTER = 2.5;
+
+function measureLocalidadHeader(): number {
+  return FS_LOCALIDAD * 0.38 + LOCALIDAD_GAP_AFTER + 2;
+}
+
+function drawLocalidadHeader(doc: jsPDF, cursor: Cursor, localidad: string, cont: boolean): void {
+  const colLeft = colX(cursor.col);
+  const label = cont ? `${localidad} (cont.)` : localidad;
+
+  // The line spans the full width of the current column
+  const lineY = cursor.y + 0.5;
+  doc.setDrawColor(...COLOR_HEADER_DARK);
+  doc.setLineWidth(LOCALIDAD_LINE_W);
+  doc.line(colLeft, lineY, colLeft + COL_W, lineY);
+
+  cursor.y += 1.5;
+
+  // Text below the line, left-aligned
+  doc.setFontSize(FS_LOCALIDAD);
+  doc.setFont('Poppins', 'bold');
+  doc.setTextColor(...COLOR_HEADER_DARK);
+
+  for (const line of wrapText(doc, label, COL_W)) {
+    doc.text(line, colLeft, cursor.y + FS_LOCALIDAD * 0.35);
+    cursor.y += FS_LOCALIDAD * 0.38;
+  }
+
+  cursor.y += LOCALIDAD_GAP_AFTER;
+}
+
 function drawEspHeader(doc: jsPDF, cursor: Cursor, esp: string, cont: boolean): void {
   const x = colX(cursor.col);
   const label = cont ? `${esp} (cont.)` : esp;
@@ -202,6 +290,9 @@ function measurePrestador(doc: jsPDF, p: Prestador): number {
   doc.setFontSize(FS_DETALLE);
   if (p.direccion) {
     h += wrapText(doc, p.direccion, textW).length * (FS_DETALLE * 0.38);
+  }
+  if (p.telefono) {
+    h += wrapText(doc, p.telefono, textW).length * (FS_DETALLE * 0.38);
   }
   if (p.subespecialidades.length > 0) {
     const subsText = p.subespecialidades.join(' - ');
@@ -238,6 +329,15 @@ function drawPrestador(doc: jsPDF, cursor: Cursor, p: Prestador): void {
     }
   }
 
+  // Teléfono
+  if (p.telefono) {
+    doc.setFont('Poppins', 'normal');
+    for (const line of wrapText(doc, p.telefono, textW)) {
+      doc.text(line, x, cursor.y + FS_DETALLE * 0.35);
+      cursor.y += FS_DETALLE * 0.38;
+    }
+  }
+
   // Subespecialidades
   if (p.subespecialidades.length > 0) {
     doc.setFont('Poppins', 'italic');
@@ -261,9 +361,12 @@ const FS_NORMAS_LIST = 10;
 // Convert pt to mm for jsPDF (1pt = 0.3528mm)
 const PT_TO_MM = 0.3528;
 const NORMAS_LINE_H = 12 * PT_TO_MM;    // ~4.23mm interlineado automático
-const NORMAS_PARA_GAP = 20 * PT_TO_MM;  // ~7.06mm entre párrafos
-const NORMAS_TITLE_GAP = 20 * PT_TO_MM; // ~7.06mm después de título
+const NORMAS_PARA_GAP = 6 * PT_TO_MM;   // ~2.12mm entre párrafos
+const NORMAS_TITLE_GAP = 19 * PT_TO_MM; // ~6.70mm después de título
 const NORMAS_FONT = 'Calibri';
+// Two-column bullet list layout
+const LIST_COL_GAP = 15 * PT_TO_MM;     // 15pt (~5.3mm) minimum gap between columns
+const LIST_BULLET = '\u2022 ';
 
 function drawSectionHeader(doc: jsPDF, tabText: string, pageNum: number): void {
   const tabH = 5.5;
@@ -272,7 +375,7 @@ function drawSectionHeader(doc: jsPDF, tabText: string, pageNum: number): void {
   const tabPadX = 3;
   const pageNumGap = 5.6;
   const FS_TAB = 10;  // Calibri Bold 10pt per reference
-  const isRightSide = pageNum % 2 === 0;
+  const isRightSide = pageNum % 2 !== 0; // odd = right, even = left
 
   // Measure tab text
   doc.setFontSize(FS_TAB);
@@ -313,8 +416,13 @@ function drawSectionHeader(doc: jsPDF, tabText: string, pageNum: number): void {
   doc.text(pageNumText, pageNumX, textY);
 }
 
+const FS_NORMAS_SUBTITLE = 10; // h2 subtitles: 10pt Bold (per reference)
+
 function blockFontSize(block: NormasBlock): number {
-  if (block.type === 'heading') return FS_NORMAS_HEADING;
+  if (block.type === 'heading') {
+    // h1 = 12pt, h2+ = 10pt Bold
+    return (block.level ?? 1) <= 1 ? FS_NORMAS_HEADING : FS_NORMAS_SUBTITLE;
+  }
   if (block.type === 'list-item') return FS_NORMAS_LIST;
   return FS_NORMAS_BODY;
 }
@@ -456,6 +564,11 @@ function drawTableRow(doc: jsPDF, y: number, block: NormasBlock, maxW: number): 
 
 // --- Block measurement & drawing ---
 
+function headingAfterGap(block: NormasBlock): number {
+  // h1 titles: full title gap after. h2 subtitles: smaller gap (closer to content)
+  return (block.level ?? 1) <= 1 ? NORMAS_TITLE_GAP : NORMAS_LINE_H;
+}
+
 function measureBlock(doc: jsPDF, block: NormasBlock, maxW: number): number {
   if (block.type === 'table-row') return measureTableRow(doc, block, maxW);
 
@@ -467,7 +580,7 @@ function measureBlock(doc: jsPDF, block: NormasBlock, maxW: number): number {
   const prefix = block.type === 'list-item' ? '  \u2022 ' : '';
   const lines = wrapText(doc, prefix + text, maxW);
   const textH = lines.length * NORMAS_LINE_H;
-  const afterGap = block.type === 'heading' ? NORMAS_TITLE_GAP : NORMAS_PARA_GAP;
+  const afterGap = block.type === 'heading' ? headingAfterGap(block) : NORMAS_PARA_GAP;
   return textH + afterGap;
 }
 
@@ -574,9 +687,77 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
     }
   }
 
-  y += block.type === 'heading' ? NORMAS_TITLE_GAP : NORMAS_PARA_GAP;
+  y += block.type === 'heading' ? headingAfterGap(block) : NORMAS_PARA_GAP;
 
   return y;
+}
+
+// --- Two-column list helpers ---
+
+function measureListItem2Col(doc: jsPDF, block: NormasBlock, colW: number): number {
+  const fs = FS_NORMAS_LIST;
+  doc.setFontSize(fs);
+  doc.setFont(NORMAS_FONT, blockFontStyle(block));
+  const text = LIST_BULLET + spanText(block.spans);
+  const lines = wrapText(doc, text, colW);
+  return lines.length * NORMAS_LINE_H;
+}
+
+function drawListItem2Col(doc: jsPDF, x: number, y: number, block: NormasBlock, colW: number): number {
+  const fs = FS_NORMAS_LIST;
+  const text = LIST_BULLET + spanText(block.spans);
+  doc.setFontSize(fs);
+  doc.setFont(NORMAS_FONT, blockFontStyle(block));
+  doc.setTextColor(...COLOR_TEXT);
+  const lines = wrapText(doc, text, colW);
+  for (const line of lines) {
+    doc.text(line, x, y + fs * 0.35);
+    y += NORMAS_LINE_H;
+  }
+  return y;
+}
+
+/**
+ * Measure the total height of a batch of list items rendered in two columns.
+ * Items are split: first half in left column, second half in right column.
+ */
+function measureListBatch2Col(doc: jsPDF, items: NormasBlock[], textW: number): number {
+  const colW = (textW - LIST_COL_GAP) / 2;
+  const half = Math.ceil(items.length / 2);
+  const leftItems = items.slice(0, half);
+  const rightItems = items.slice(half);
+
+  let leftH = 0;
+  for (const item of leftItems) leftH += measureListItem2Col(doc, item, colW);
+  let rightH = 0;
+  for (const item of rightItems) rightH += measureListItem2Col(doc, item, colW);
+
+  return Math.max(leftH, rightH) + NORMAS_PARA_GAP;
+}
+
+/**
+ * Draw a batch of list items in two columns.
+ */
+function drawListBatch2Col(doc: jsPDF, y: number, items: NormasBlock[], textW: number): number {
+  const colW = (textW - LIST_COL_GAP) / 2;
+  const half = Math.ceil(items.length / 2);
+  const leftItems = items.slice(0, half);
+  const rightItems = items.slice(half);
+
+  const leftX = MARGIN_LEFT;
+  const rightX = MARGIN_LEFT + colW + LIST_COL_GAP;
+
+  let leftY = y;
+  for (const item of leftItems) {
+    leftY = drawListItem2Col(doc, leftX, leftY, item, colW);
+  }
+
+  let rightY = y;
+  for (const item of rightItems) {
+    rightY = drawListItem2Col(doc, rightX, rightY, item, colW);
+  }
+
+  return Math.max(leftY, rightY) + NORMAS_PARA_GAP;
 }
 
 function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBuffer {
@@ -586,28 +767,79 @@ function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBu
 
   drawSectionHeader(doc, headerText, 1);
 
-  for (const block of blocks) {
+  let i = 0;
+  while (i < blocks.length) {
+    const block = blocks[i];
+
+    // Batch consecutive list-item blocks for two-column layout
+    if (block.type === 'list-item') {
+      const batchStart = i;
+      while (i < blocks.length && blocks[i].type === 'list-item') i++;
+      let batch = blocks.slice(batchStart, i);
+
+      // Render batch, splitting across pages if needed
+      while (batch.length > 0) {
+        const batchH = measureListBatch2Col(doc, batch, textW);
+        const availH = PAGE_H - MARGIN_BOTTOM - y;
+
+        if (batchH <= availH) {
+          y = drawListBatch2Col(doc, y, batch, textW);
+          break;
+        }
+
+        // If even a fresh page can't fit entire batch, just draw what we can
+        if (y > MARGIN_TOP) {
+          doc.addPage();
+          y = MARGIN_TOP;
+          drawSectionHeader(doc, headerText, doc.getNumberOfPages());
+        }
+
+        // If batch still doesn't fit on a fresh page, draw it anyway (best effort)
+        y = drawListBatch2Col(doc, y, batch, textW);
+        break;
+      }
+      continue;
+    }
+
+    // Regular block (heading, paragraph, table-row)
     const blockH = measureBlock(doc, block, textW);
 
-    if (y + blockH > PAGE_H - MARGIN_BOTTOM) {
+    // Keep headings with the next block — avoid orphaned titles at page bottom
+    let requiredH = blockH;
+    if (block.type === 'heading' && i + 1 < blocks.length) {
+      const next = blocks[i + 1];
+      if (next.type === 'list-item') {
+        // Next is a list batch — estimate at least a few lines
+        requiredH += NORMAS_LINE_H * 3;
+      } else {
+        requiredH += measureBlock(doc, next, textW);
+      }
+    }
+
+    if (y + requiredH > PAGE_H - MARGIN_BOTTOM) {
       doc.addPage();
       y = MARGIN_TOP;
       drawSectionHeader(doc, headerText, doc.getNumberOfPages());
     }
 
     y = drawBlock(doc, y, block, textW);
+    i++;
   }
 
   return doc.output('arraybuffer');
 }
 
-// --- Generate pages for a single province ---
+// --- Generate pages for a single province+rubro ---
 
-function generateProvince(section: ProvinciaSection, startPage: number): ArrayBuffer {
+function generateProvinceRubro(
+  provNombre: string,
+  rubro: RubroSection,
+  startPage: number,
+): ArrayBuffer {
   const doc = createContentDoc();
   const cursor: Cursor = { col: 0, y: MARGIN_TOP };
 
-  drawHeader(doc, section.nombre, startPage);
+  drawHeader(doc, provNombre, rubro.nombre, startPage);
 
   const getPageNum = () => startPage + doc.getNumberOfPages() - 1;
 
@@ -619,29 +851,55 @@ function generateProvince(section: ProvinciaSection, startPage: number): ArrayBu
       doc.addPage();
       cur.col = 0;
       cur.y = MARGIN_TOP;
-      drawHeader(doc, section.nombre, getPageNum());
+      drawHeader(doc, provNombre, rubro.nombre, getPageNum());
     }
   };
 
-  for (const esp of section.especialidades) {
-    // Ensure room for header + at least the first prestador
-    const firstPH = esp.prestadores.length > 0 ? measurePrestador(doc, esp.prestadores[0]) : 0;
-    if (remaining(cursor) < 8 + firstPH) {
-      nextCol(cursor);
-    }
+  let currentLoc = '';
+  const drawnLocs = new Set<string>(); // track which localidades have been drawn at least once
 
-    drawEspHeader(doc, cursor, esp.nombre, false);
+  for (const loc of rubro.localidades) {
+    for (const esp of loc.especialidades) {
+      // Check if we need a localidad header (new localidad or column/page break)
+      const needLocHeader = loc.nombre !== currentLoc;
+      const locHeaderH = needLocHeader ? measureLocalidadHeader() : 0;
+      const firstPH = esp.prestadores.length > 0 ? measurePrestador(doc, esp.prestadores[0]) : 0;
 
-    for (const prest of esp.prestadores) {
-      const pH = measurePrestador(doc, prest);
-      if (remaining(cursor) < pH) {
+      if (remaining(cursor) < locHeaderH + 8 + firstPH) {
         nextCol(cursor);
-        drawEspHeader(doc, cursor, esp.nombre, true);
+        currentLoc = ''; // Force localidad header after column break
       }
-      drawPrestador(doc, cursor, prest);
-    }
 
-    cursor.y += 1;
+      // Draw localidad header if entering a new localidad (or re-entering after column break)
+      if (loc.nombre !== currentLoc) {
+        const isCont = drawnLocs.has(loc.nombre);
+        drawLocalidadHeader(doc, cursor, loc.nombre, isCont);
+        currentLoc = loc.nombre;
+        drawnLocs.add(loc.nombre);
+      }
+
+      // Especialidad header
+      if (remaining(cursor) < 8 + firstPH) {
+        nextCol(cursor);
+        drawLocalidadHeader(doc, cursor, loc.nombre, true);
+        currentLoc = loc.nombre;
+      }
+
+      drawEspHeader(doc, cursor, esp.nombre, false);
+
+      for (const prest of esp.prestadores) {
+        const pH = measurePrestador(doc, prest);
+        if (remaining(cursor) < pH) {
+          nextCol(cursor);
+          drawLocalidadHeader(doc, cursor, loc.nombre, true);
+          currentLoc = loc.nombre;
+          drawEspHeader(doc, cursor, esp.nombre, true);
+        }
+        drawPrestador(doc, cursor, prest);
+      }
+
+      cursor.y += 1;
+    }
   }
 
   return doc.output('arraybuffer');
@@ -777,92 +1035,77 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores, normasBlocks, programaBlocks } = e.data.payload;
-    const sections = groupByProvincia(prestadores);
-    const hasNormas = normasBlocks && normasBlocks.length > 0;
-    const hasPrograma = programaBlocks && programaBlocks.length > 0;
+    const { prestadores, textBlocks, provinciaOrder, rubroOrder } = e.data.payload;
+    const sections = groupByProvincia(prestadores, provinciaOrder, rubroOrder);
+    const hasText = textBlocks && textBlocks.length > 0;
 
     // Load fonts (cached after first call)
     await loadFonts();
 
     // Fetch cover PDFs
-    const [generalCoverBuf, normasCoverBuf, prestadoresCoverBuf, provinciaCoverBuf] = await Promise.all([
+    const [generalCoverBuf, textCoverBuf, provinciaCoverBuf] = await Promise.all([
       fetchBuffer('/Caratula-General.pdf'),
-      fetchBuffer('/Caratula-NormasGenerales.pdf'),
-      fetchBuffer('/Caratula-ProgramaMedicoAsistencial.pdf'),
+      fetchBuffer('/Caratula-ContactosServiciosCobertura.pdf'),
       fetchBuffer('/Caratula-Integra4_provincias.pdf'),
     ]);
 
     // We'll build an ordered list of PDF buffers to merge
     const parts: { label: string; buffer: ArrayBuffer | Uint8Array }[] = [];
     // Cover pages don't count in page numbering for content headers
-    // We track contentPage separately (covers are unnumbered)
     let currentPage = 1;
 
     // 0. General cover (portada principal)
     parts.push({ label: 'Portada General', buffer: generalCoverBuf });
 
-    // Track extra sections for progress
-    const extraSections = (hasNormas ? 1 : 0) + (hasPrograma ? 1 : 0);
-    const totalSteps = sections.length + extraSections;
+    // Track progress
+    const totalRubroSections = sections.reduce((sum, s) => sum + s.rubros.length, 0);
+    const extraSections = hasText ? 1 : 0;
+    const totalSteps = totalRubroSections + extraSections;
     let stepNum = 0;
 
-    // 1. Normas section
-    if (hasNormas) {
+    // 1. Contactos, Servicios y Cobertura section
+    if (hasText) {
       stepNum++;
       self.postMessage({
         type: 'PROGRESS',
-        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Normas Generales' },
+        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Contactos, Servicios y Cobertura' },
       } satisfies WorkerMessage);
 
-      parts.push({ label: 'Carátula Normas', buffer: normasCoverBuf });
+      parts.push({ label: 'Carátula Contactos, Servicios y Cobertura', buffer: textCoverBuf });
 
-      const normasBuffer = generateTextSection(normasBlocks!, 'NORMAS GENERALES');
-      parts.push({ label: 'Normas Generales', buffer: normasBuffer });
-      const loaded = await PDFDocument.load(normasBuffer);
+      const textBuffer = generateTextSection(textBlocks!, 'CONTACTOS, SERVICIOS Y COBERTURA');
+      parts.push({ label: 'Contactos, Servicios y Cobertura', buffer: textBuffer });
+      const loaded = await PDFDocument.load(textBuffer);
       currentPage += loaded.getPageCount();
     }
 
-    // 2. Programa Médico Asistencial section
-    if (hasPrograma) {
-      stepNum++;
-      self.postMessage({
-        type: 'PROGRESS',
-        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Programa Médico Asistencial' },
-      } satisfies WorkerMessage);
-
-      parts.push({ label: 'Carátula Programa Médico', buffer: prestadoresCoverBuf });
-
-      const programaBuffer = generateTextSection(programaBlocks!, 'PROGRAMA MÉDICO ASISTENCIAL');
-      parts.push({ label: 'Programa Médico Asistencial', buffer: programaBuffer });
-      const loaded = await PDFDocument.load(programaBuffer);
-      currentPage += loaded.getPageCount();
-    }
-
-    // 3. Each province: province cover + content
+    // 2. Each province: province cover, then each rubro's content
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
-      stepNum++;
 
-      self.postMessage({
-        type: 'PROGRESS',
-        payload: {
-          phase: 'generating',
-          current: stepNum,
-          total: totalSteps,
-          message: `Generando: ${section.nombre} (${section.especialidades.length} especialidades)`,
-        },
-      } satisfies WorkerMessage);
-
-      // Province cover with dynamic name
+      // Province cover with dynamic name (one per province)
       const provCoverBytes = await createProvinceCover(provinciaCoverBuf, section.nombre);
       parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBytes });
 
-      // Province content
-      const provBuffer = generateProvince(section, currentPage);
-      parts.push({ label: section.nombre, buffer: provBuffer });
-      const loaded = await PDFDocument.load(provBuffer);
-      currentPage += loaded.getPageCount();
+      // Generate content for each rubro within this province
+      for (const rubro of section.rubros) {
+        stepNum++;
+
+        self.postMessage({
+          type: 'PROGRESS',
+          payload: {
+            phase: 'generating',
+            current: stepNum,
+            total: totalSteps,
+            message: `Generando: ${section.nombre} — ${rubro.nombre} (${rubro.localidades.length} localidades)`,
+          },
+        } satisfies WorkerMessage);
+
+        const rubroBuffer = generateProvinceRubro(section.nombre, rubro, currentPage);
+        parts.push({ label: `${section.nombre} — ${rubro.nombre}`, buffer: rubroBuffer });
+        const loaded = await PDFDocument.load(rubroBuffer);
+        currentPage += loaded.getPageCount();
+      }
     }
 
     // Phase 2: Merge all parts

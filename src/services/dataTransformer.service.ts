@@ -5,6 +5,37 @@ function str(value: unknown): string {
   return String(value).trim();
 }
 
+/** Collapse multiple spaces/dashes, trim, and title-case */
+function cleanName(s: string): string {
+  return s
+    .replace(/\s+/g, ' ')        // collapse whitespace
+    .replace(/\s*-\s*/g, ' - ')  // normalize dashes
+    .trim();
+}
+
+/** Title Case: "BUENOS AIRES" → "Buenos Aires", preserving short words */
+function titleCase(s: string): string {
+  const lower = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'y', 'e', 'en']);
+  return s
+    .toLowerCase()
+    .split(' ')
+    .map((w, i) => {
+      if (i > 0 && lower.has(w)) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ');
+}
+
+/** Normalize direction: collapse spaces, trim trailing/leading junk */
+function cleanDireccion(s: string): string {
+  return s.replace(/\s+/g, ' ').replace(/\s*;\s*/g, ', ').trim();
+}
+
+/** Normalize phone: trim, collapse spaces */
+function cleanTelefono(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Transforms raw CSV rows into Prestador objects.
  * Merges rows with the same prestador code + especialidad + dirección,
@@ -18,16 +49,18 @@ export function transformRows(
   const mergeMap = new Map<string, Prestador>();
 
   for (const row of rows) {
-    const codigo = str(row[mapping.codigo]);
-    const nombre = str(row[mapping.nombre]);
-    const direccion = str(row[mapping.direccion]);
-    const localidad = str(row[mapping.localidad]);
-    const provincia = str(row[mapping.provincia]);
-    const especialidad = str(row[mapping.especialidad]).toUpperCase();
-    const subespecialidad = mapping.subespecialidad ? str(row[mapping.subespecialidad]) : '';
-    const nombreInsti = mapping.nombreInsti ? str(row[mapping.nombreInsti]) : '';
+    const codigo = str(row[mapping.codigo]).trim();
+    const nombre = cleanName(str(row[mapping.nombre]));
+    const direccion = cleanDireccion(str(row[mapping.direccion]));
+    const localidad = titleCase(cleanName(str(row[mapping.localidad])));
+    const provincia = cleanName(str(row[mapping.provincia])).toUpperCase();
+    const especialidad = cleanName(str(row[mapping.especialidad])).toUpperCase();
+    const rubro = cleanName(str(row[mapping.rubro])).toUpperCase();
+    const subespecialidad = mapping.subespecialidad ? cleanName(str(row[mapping.subespecialidad])) : '';
+    const nombreInsti = mapping.nombreInsti ? cleanName(str(row[mapping.nombreInsti])) : '';
+    const telefono = mapping.telefono ? cleanTelefono(str(row[mapping.telefono])) : '';
 
-    if (!especialidad || !nombre) continue;
+    if (!especialidad || !nombre || !rubro) continue;
 
     const key = `${codigo}||${especialidad}||${direccion}||${localidad}`.toUpperCase();
 
@@ -42,9 +75,11 @@ export function transformRows(
         nombre,
         direccion,
         localidad,
-        provincia: provincia.trim(),
+        provincia,
         especialidad,
+        rubro,
         nombreInsti: nombreInsti || undefined,
+        telefono: telefono || undefined,
         subespecialidades: subespecialidad ? [subespecialidad.toUpperCase()] : [],
       });
     }

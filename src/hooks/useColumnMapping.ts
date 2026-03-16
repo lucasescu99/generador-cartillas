@@ -14,9 +14,11 @@ export const MAPPING_FIELDS: MappingField[] = [
   { key: 'direccion', label: 'Dirección', required: true },
   { key: 'localidad', label: 'Localidad', required: true },
   { key: 'provincia', label: 'Provincia', required: true },
+  { key: 'rubro', label: 'Rubro', required: true },
   { key: 'codigo', label: 'Código Prestador', required: false },
   { key: 'subespecialidad', label: 'Subespecialidad', required: false },
   { key: 'nombreInsti', label: 'Nombre Institución', required: false },
+  { key: 'telefono', label: 'Teléfono', required: false },
   { key: 'planWeb', label: 'Nombre Plan', required: false },
 ];
 
@@ -42,7 +44,9 @@ function autoDetect(headers: string[]): Partial<ColumnMapping> {
   tryMatch('localidad', 'localidad', 'ciudad', 'city');
   tryMatch('provincia', 'provincia', 'state', 'prov');
   tryMatch('codigo', 'prestador', 'codigo', 'code', 'id');
+  tryMatch('rubro', 'rubro_nombre', 'rubro', 'category');
   tryMatch('nombreInsti', 'nombre_insti', 'institucion', 'institution');
+  tryMatch('telefono', 'telefono', 'telefon', 'phone', 'tel');
   tryMatch('planWeb', 'nombre_plan', 'plan_web', 'plan');
 
   return auto;

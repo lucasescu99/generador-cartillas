@@ -20,4 +20,7 @@ Thumbs.db
 # Test data
 test-data.csv
 
+# Dev fixture files (preloaded in development)
+public/dev/
+
 .vercel

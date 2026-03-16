@@ -1,75 +1,102 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useCartilla } from '../../context/CartillaContext';
-import { groupByEspecialidad } from '../../services/dataTransformer.service';
-import { EspecialidadIndex } from '../../components/EspecialidadIndex/EspecialidadIndex';
-import { EspecialidadSection } from '../../components/EspecialidadSection/EspecialidadSection';
+import { usePdfGenerator } from '../../hooks/usePdfGenerator';
+import { ProgressBar } from '../../components/ProgressBar/ProgressBar';
 import styles from './PreviewPage.module.css';
 
 export function PreviewPage() {
   const navigate = useNavigate();
-  const { cartillaData } = useCartilla();
-  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const { cartillaData, textBlocks, provinciaOrder, rubroOrder, reset } = useCartilla();
+  const { start, progress, status, download, metadata, errorMessage, pdfUrl } = usePdfGenerator();
+  const started = useRef(false);
 
-  const groups = useMemo(() => {
-    if (!cartillaData) return [];
-    return groupByEspecialidad(cartillaData.prestadores);
-  }, [cartillaData]);
-
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const g of groups) {
-      m.set(g.nombre, g.totalPrestadores);
-    }
-    return m;
-  }, [groups]);
+  useEffect(() => {
+    if (started.current || !cartillaData || cartillaData.prestadores.length === 0) return;
+    started.current = true;
+    start(cartillaData.prestadores, textBlocks, provinciaOrder, rubroOrder);
+  }, [cartillaData, textBlocks, provinciaOrder, rubroOrder, start]);
 
   if (!cartillaData || cartillaData.prestadores.length === 0) {
     return <Navigate to="/" replace />;
   }
 
-  const especialidades = groups.map((g) => g.nombre);
+  const handleReset = () => {
+    reset();
+    navigate('/');
+  };
 
-  const scrollTo = (esp: string) => {
-    sectionRefs.current.get(esp)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const formatSize = (kb: number) => {
+    if (kb < 1024) return `${kb} KB`;
+    return `${(kb / 1024).toFixed(1)} MB`;
+  };
+
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms} ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   return (
     <div className={styles.container}>
-      <EspecialidadIndex
-        especialidades={especialidades}
-        counts={counts}
-        onSelect={scrollTo}
-      />
-
-      <main className={styles.main}>
-        <div className={styles.topBar}>
-          <div className={styles.titleGroup}>
-            <h1>Vista Previa{cartillaData.planNombre ? ` — ${cartillaData.planNombre}` : ''}</h1>
-            <p>
-              {cartillaData.totalEspecialidades} especialidades — {cartillaData.totalPrestadores.toLocaleString()} prestadores
-            </p>
-          </div>
-          <button className={styles.backBtn} onClick={() => navigate('/mapping')}>
-            ← Volver al mapeo
-          </button>
+      {/* Top bar */}
+      <div className={styles.topBar}>
+        <div className={styles.titleGroup}>
+          <h1 className={styles.title}>
+            {status === 'complete' ? 'Vista Previa del PDF' : 'Generando Cartilla'}
+          </h1>
+          <p className={styles.subtitle}>
+            {cartillaData.totalPrestadores.toLocaleString()} prestadores · {cartillaData.totalEspecialidades} especialidades
+            {status === 'complete' && metadata && (
+              <> · {metadata.pageCount.toLocaleString()} pág · {formatSize(metadata.sizeKb)} · {formatDuration(metadata.durationMs)}</>
+            )}
+          </p>
         </div>
-
-        {groups.map((g) => (
-          <div
-            key={g.nombre}
-            ref={(el) => { if (el) sectionRefs.current.set(g.nombre, el); }}
-          >
-            <EspecialidadSection group={g} />
-          </div>
-        ))}
-      </main>
-
-      <div className={styles.floatingBar}>
-        <button className={styles.generateBtn} onClick={() => navigate('/generate')}>
-          Generar PDF
-        </button>
+        <div className={styles.actions}>
+          <button className={styles.backBtn} onClick={() => navigate('/order')}>
+            ← Volver al orden
+          </button>
+          {status === 'complete' && (
+            <>
+              <button className={styles.downloadBtn} onClick={() => download()}>
+                Descargar PDF
+              </button>
+              <button className={styles.resetBtn} onClick={handleReset}>
+                Nueva cartilla
+              </button>
+            </>
+          )}
+          {status === 'error' && (
+            <button className={styles.resetBtn} onClick={handleReset}>
+              Reintentar
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Progress */}
+      {(status === 'idle' || status === 'generating') && (
+        <div className={styles.progressArea}>
+          <ProgressBar progress={progress} />
+          <p className={styles.warning}>No cierres esta pestaña mientras se genera el PDF</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {status === 'error' && (
+        <div className={styles.errorCard}>
+          <h2 className={styles.errorTitle}>Error</h2>
+          <p>{errorMessage || 'Error desconocido'}</p>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      {status === 'complete' && pdfUrl && (
+        <iframe
+          className={styles.pdfViewer}
+          src={pdfUrl}
+          title="Vista previa del PDF"
+        />
+      )}
     </div>
   );
 }

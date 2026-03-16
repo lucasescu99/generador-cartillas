@@ -7,15 +7,17 @@ interface CartillaState {
   parsedFile: ParsedFile | null;
   mapping: ColumnMapping | null;
   cartillaData: CartillaData | null;
-  normasBlocks: NormasBlock[] | null;
-  programaBlocks: NormasBlock[] | null;
+  textBlocks: NormasBlock[] | null;
+  provinciaOrder: string[];
+  rubroOrder: string[];
 }
 
 interface CartillaContextType extends CartillaState {
   setParsedFile: (file: ParsedFile) => void;
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
-  setNormasBlocks: (blocks: NormasBlock[] | null) => void;
-  setProgramaBlocks: (blocks: NormasBlock[] | null) => void;
+  setTextBlocks: (blocks: NormasBlock[] | null) => void;
+  setProvinciaOrder: (order: string[]) => void;
+  setRubroOrder: (order: string[]) => void;
   reset: () => void;
 }
 
@@ -23,8 +25,9 @@ const initial: CartillaState = {
   parsedFile: null,
   mapping: null,
   cartillaData: null,
-  normasBlocks: null,
-  programaBlocks: null,
+  textBlocks: null,
+  provinciaOrder: [],
+  rubroOrder: [],
 };
 
 const CartillaContext = createContext<CartillaContextType | null>(null);
@@ -39,21 +42,34 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
   const applyMapping = useCallback((mapping: ColumnMapping, allRows: Record<string, unknown>[]) => {
     const prestadores = transformRows(allRows, mapping);
     const cartillaData = buildCartillaData(prestadores, allRows, mapping);
-    setState((prev) => ({ ...prev, mapping, cartillaData }));
+    // Extract unique provinces and rubros, sorted alphabetically as default order
+    const provSet = new Set<string>();
+    const rubroSet = new Set<string>();
+    for (const p of prestadores) {
+      provSet.add((p.provincia || 'SIN PROVINCIA').trim().toUpperCase());
+      rubroSet.add(p.rubro);
+    }
+    const provinciaOrder = Array.from(provSet).sort((a, b) => a.localeCompare(b, 'es'));
+    const rubroOrder = Array.from(rubroSet).sort((a, b) => a.localeCompare(b, 'es'));
+    setState((prev) => ({ ...prev, mapping, cartillaData, provinciaOrder, rubroOrder }));
   }, []);
 
-  const setNormasBlocks = useCallback((normasBlocks: NormasBlock[] | null) => {
-    setState((prev) => ({ ...prev, normasBlocks }));
+  const setTextBlocks = useCallback((textBlocks: NormasBlock[] | null) => {
+    setState((prev) => ({ ...prev, textBlocks }));
   }, []);
 
-  const setProgramaBlocks = useCallback((programaBlocks: NormasBlock[] | null) => {
-    setState((prev) => ({ ...prev, programaBlocks }));
+  const setProvinciaOrder = useCallback((provinciaOrder: string[]) => {
+    setState((prev) => ({ ...prev, provinciaOrder }));
+  }, []);
+
+  const setRubroOrder = useCallback((rubroOrder: string[]) => {
+    setState((prev) => ({ ...prev, rubroOrder }));
   }, []);
 
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setNormasBlocks, setProgramaBlocks, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setProvinciaOrder, setRubroOrder, reset }}>
       {children}
     </CartillaContext.Provider>
   );

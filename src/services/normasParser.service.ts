@@ -12,6 +12,7 @@ const MAMMOTH_OPTIONS = {
     "p[style-name='heading 1'] => h1:fresh",
     "p[style-name='heading 2'] => h2:fresh",
     "p[style-name='heading 3'] => h3:fresh",
+    "p[style-name='List Paragraph'] => li:fresh",
   ],
 };
 
