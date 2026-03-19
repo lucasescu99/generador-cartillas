@@ -4,6 +4,7 @@ export interface Prestador {
   direccion: string;
   localidad: string;
   provincia: string;
+  zona: string;
   especialidad: string;
   rubro: string;
   nombreInsti?: string;
@@ -25,6 +26,7 @@ export interface ColumnMapping {
   direccion: string;
   localidad: string;
   provincia: string;
+  zona: string;
   especialidad: string;
   rubro: string;
   subespecialidad?: string;
@@ -62,7 +64,7 @@ export interface NormasBlock {
 }
 
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; provinciaOrder?: string[]; rubroOrder?: string[] } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; provinciaOrder?: string[]; zonaOrder?: string[]; rubroOrder?: string[] } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };

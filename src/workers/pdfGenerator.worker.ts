@@ -54,16 +54,22 @@ interface RubroSection {
   localidades: LocalidadGroup[];
 }
 
-interface ProvinciaSection {
+interface ZonaSection {
   nombre: string;
   rubros: RubroSection[];
 }
 
-// --- Data grouping: provincia → rubro → localidad → especialidad → prestadores ---
+interface ProvinciaSection {
+  nombre: string;
+  zonas: ZonaSection[];
+}
+
+// --- Data grouping: provincia → zona → rubro → localidad (alphabetical) → especialidad → prestadores ---
 
 function groupByProvincia(
   prestadores: Prestador[],
   provinciaOrder?: string[],
+  zonaOrder?: string[],
   rubroOrder?: string[],
 ): ProvinciaSection[] {
   const provMap = new Map<string, Prestador[]>();
@@ -83,66 +89,86 @@ function groupByProvincia(
   for (const provNombre of sortedProvs) {
     const provPrestadores = provMap.get(provNombre)!;
 
-    // Group by rubro
-    const rubroMap = new Map<string, Prestador[]>();
+    // Group by zona
+    const zonaMap = new Map<string, Prestador[]>();
     for (const p of provPrestadores) {
-      const rubro = p.rubro.toUpperCase().trim();
-      if (!rubroMap.has(rubro)) rubroMap.set(rubro, []);
-      rubroMap.get(rubro)!.push(p);
+      const zona = (p.zona || 'SIN ZONA').trim().toUpperCase();
+      if (!zonaMap.has(zona)) zonaMap.set(zona, []);
+      zonaMap.get(zona)!.push(p);
     }
 
-    const sortedRubros = rubroOrder && rubroOrder.length > 0
-      ? rubroOrder.filter((r) => rubroMap.has(r))
-      : Array.from(rubroMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+    const sortedZonas = zonaOrder && zonaOrder.length > 0
+      ? zonaOrder.filter((z) => zonaMap.has(z))
+      : Array.from(zonaMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
-    const rubros: RubroSection[] = [];
+    const zonas: ZonaSection[] = [];
 
-    for (const rubroNombre of sortedRubros) {
-      const rubroPrestadores = rubroMap.get(rubroNombre)!;
+    for (const zonaNombre of sortedZonas) {
+      const zonaPrestadores = zonaMap.get(zonaNombre)!;
 
-      // Group by localidad
-      const locMap = new Map<string, Prestador[]>();
-      for (const p of rubroPrestadores) {
-        const loc = (p.localidad || 'SIN LOCALIDAD').trim().toUpperCase();
-        if (!locMap.has(loc)) locMap.set(loc, []);
-        locMap.get(loc)!.push(p);
+      // Group by rubro within this zona
+      const rubroMap = new Map<string, Prestador[]>();
+      for (const p of zonaPrestadores) {
+        const rubro = p.rubro.toUpperCase().trim();
+        if (!rubroMap.has(rubro)) rubroMap.set(rubro, []);
+        rubroMap.get(rubro)!.push(p);
       }
 
-      const sortedLocs = Array.from(locMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
-      const localidades: LocalidadGroup[] = [];
+      const sortedRubros = rubroOrder && rubroOrder.length > 0
+        ? rubroOrder.filter((r) => rubroMap.has(r))
+        : Array.from(rubroMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
-      for (const locNombre of sortedLocs) {
-        const locPrestadores = locMap.get(locNombre)!;
+      const rubros: RubroSection[] = [];
 
-        // Group by especialidad within this localidad
-        const espMap = new Map<string, Prestador[]>();
-        for (const p of locPrestadores) {
-          const esp = p.especialidad.toUpperCase().trim();
-          if (!espMap.has(esp)) espMap.set(esp, []);
-          espMap.get(esp)!.push(p);
+      for (const rubroNombre of sortedRubros) {
+        const rubroPrestadores = rubroMap.get(rubroNombre)!;
+
+        // Group by localidad (always alphabetical)
+        const locMap = new Map<string, Prestador[]>();
+        for (const p of rubroPrestadores) {
+          const loc = (p.localidad || 'SIN LOCALIDAD').trim().toUpperCase();
+          if (!locMap.has(loc)) locMap.set(loc, []);
+          locMap.get(loc)!.push(p);
         }
 
-        const especialidades: EspGroup[] = [];
-        const sortedEsps = Array.from(espMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+        const sortedLocs = Array.from(locMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+        const localidades: LocalidadGroup[] = [];
 
-        for (const espNombre of sortedEsps) {
-          const list = espMap.get(espNombre)!;
-          list.sort((a, b) => {
-            const aCentro = isCentroMedicus(a) ? 0 : 1;
-            const bCentro = isCentroMedicus(b) ? 0 : 1;
-            if (aCentro !== bCentro) return aCentro - bCentro;
-            return a.nombre.localeCompare(b.nombre, 'es');
-          });
-          especialidades.push({ nombre: espNombre, prestadores: list });
+        for (const locNombre of sortedLocs) {
+          const locPrestadores = locMap.get(locNombre)!;
+
+          // Group by especialidad within this localidad
+          const espMap = new Map<string, Prestador[]>();
+          for (const p of locPrestadores) {
+            const esp = p.especialidad.toUpperCase().trim();
+            if (!espMap.has(esp)) espMap.set(esp, []);
+            espMap.get(esp)!.push(p);
+          }
+
+          const especialidades: EspGroup[] = [];
+          const sortedEsps = Array.from(espMap.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+          for (const espNombre of sortedEsps) {
+            const list = espMap.get(espNombre)!;
+            list.sort((a, b) => {
+              const aCentro = isCentroMedicus(a) ? 0 : 1;
+              const bCentro = isCentroMedicus(b) ? 0 : 1;
+              if (aCentro !== bCentro) return aCentro - bCentro;
+              return a.nombre.localeCompare(b.nombre, 'es');
+            });
+            especialidades.push({ nombre: espNombre, prestadores: list });
+          }
+
+          localidades.push({ nombre: locNombre, especialidades });
         }
 
-        localidades.push({ nombre: locNombre, especialidades });
+        rubros.push({ nombre: rubroNombre, localidades });
       }
 
-      rubros.push({ nombre: rubroNombre, localidades });
+      zonas.push({ nombre: zonaNombre, rubros });
     }
 
-    sections.push({ nombre: provNombre, rubros });
+    sections.push({ nombre: provNombre, zonas });
   }
 
   return sections;
@@ -163,7 +189,7 @@ function remaining(cursor: Cursor): number {
 
 // --- Drawing functions ---
 
-function drawHeader(doc: jsPDF, provincia: string, rubro: string, pageNum: number): void {
+function drawHeader(doc: jsPDF, zona: string, rubro: string, pageNum: number): void {
   const tabH = 5.5;
   const tabY = 6;
   const MIN_TAB_W = 28;
@@ -174,51 +200,51 @@ function drawHeader(doc: jsPDF, provincia: string, rubro: string, pageNum: numbe
   doc.setFontSize(FS_HEADER_TAB);
   doc.setFont('Poppins', 'normal');
 
-  const provText = provincia.toUpperCase();
-  const provTabW = Math.max(MIN_TAB_W, doc.getTextWidth(provText) + tabPadX * 2);
+  const zonaText = zona.toUpperCase();
+  const zonaTabW = Math.max(MIN_TAB_W, doc.getTextWidth(zonaText) + tabPadX * 2);
 
-  const secText = rubro.toUpperCase();
-  const secTabW = Math.max(MIN_TAB_W, doc.getTextWidth(secText) + tabPadX * 2);
+  const rubroText = rubro.toUpperCase();
+  const rubroTabW = Math.max(MIN_TAB_W, doc.getTextWidth(rubroText) + tabPadX * 2);
 
   const pageNumText = String(pageNum);
   const pageNumW = doc.getTextWidth(pageNumText);
 
-  let provTabX: number;
-  let secTabX: number;
+  let zonaTabX: number;
+  let rubroTabX: number;
   let pageNumX: number;
 
   if (isRightSide) {
-    // Right-aligned: [PROVINCIA] [CUERPO MEDICO]  pageNum
+    // Right-aligned: [ZONA] [RUBRO]  pageNum
     const rightEdge = PAGE_W - MARGIN_RIGHT;
     pageNumX = rightEdge - pageNumW;
     const tabsRight = pageNumX - pageNumGap;
-    secTabX = tabsRight - secTabW;
-    provTabX = secTabX - provTabW;
+    rubroTabX = tabsRight - rubroTabW;
+    zonaTabX = rubroTabX - zonaTabW;
   } else {
-    // Left-aligned: pageNum  [CUERPO MEDICO] [PROVINCIA]
+    // Left-aligned: pageNum  [RUBRO] [ZONA]
     pageNumX = MARGIN_LEFT;
     const tabsLeft = pageNumX + pageNumW + pageNumGap;
-    secTabX = tabsLeft;
-    provTabX = secTabX + secTabW;
+    rubroTabX = tabsLeft;
+    zonaTabX = rubroTabX + rubroTabW;
   }
 
-  // Province tab (lighter blue)
+  // Zona tab (lighter blue)
   doc.setFillColor(...COLOR_HEADER_LIGHT);
-  doc.rect(provTabX, tabY, provTabW, tabH, 'F');
+  doc.rect(zonaTabX, tabY, zonaTabW, tabH, 'F');
 
-  // Section tab (darker blue)
+  // Rubro tab (darker blue)
   doc.setFillColor(...COLOR_HEADER_DARK);
-  doc.rect(secTabX, tabY, secTabW, tabH, 'F');
+  doc.rect(rubroTabX, tabY, rubroTabW, tabH, 'F');
 
   // Tab texts - centered vertically
   const textY = tabY + tabH / 2 + FS_HEADER_TAB * 0.13;
   doc.setTextColor(...COLOR_WHITE);
   doc.setFontSize(FS_HEADER_TAB);
 
-  const provTW = doc.getTextWidth(provText);
-  doc.text(provText, provTabX + (provTabW - provTW) / 2, textY);
-  const secTW = doc.getTextWidth(secText);
-  doc.text(secText, secTabX + (secTabW - secTW) / 2, textY);
+  const zonaTW = doc.getTextWidth(zonaText);
+  doc.text(zonaText, zonaTabX + (zonaTabW - zonaTW) / 2, textY);
+  const rubroTW = doc.getTextWidth(rubroText);
+  doc.text(rubroText, rubroTabX + (rubroTabW - rubroTW) / 2, textY);
 
   // Page number
   doc.setTextColor(...COLOR_TEXT);
@@ -596,6 +622,8 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
   const hasLinks = block.spans.some((s) => s.link);
   const prefix = block.type === 'list-item' ? '  \u2022 ' : '';
 
+  const justify = block.type === 'paragraph';
+
   if (!hasLinks) {
     // Fast path: no links, draw all text at once
     doc.setFontSize(fs);
@@ -603,8 +631,13 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
     doc.setTextColor(...COLOR_TEXT);
 
     const lines = wrapText(doc, prefix + text, maxW);
-    for (const line of lines) {
-      doc.text(line, MARGIN_LEFT, y + fs * 0.35);
+    for (let li = 0; li < lines.length; li++) {
+      const isLastLine = li === lines.length - 1;
+      if (justify && !isLastLine) {
+        doc.text(lines[li], MARGIN_LEFT, y + fs * 0.35, { align: 'justify', maxWidth: maxW });
+      } else {
+        doc.text(lines[li], MARGIN_LEFT, y + fs * 0.35);
+      }
       y += NORMAS_LINE_H;
     }
   } else {
@@ -630,11 +663,17 @@ function drawBlock(doc: jsPDF, y: number, block: NormasBlock, maxW: number): num
 
     // For each wrapped line, render segments with correct styling
     let charIdx = 0;
-    for (const line of lines) {
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      const isLastLine = li === lines.length - 1;
       // Render line, then overlay links
       doc.setFont(NORMAS_FONT, baseStyle);
       doc.setTextColor(...COLOR_TEXT);
-      doc.text(line, MARGIN_LEFT, y + fs * 0.35);
+      if (justify && !isLastLine) {
+        doc.text(line, MARGIN_LEFT, y + fs * 0.35, { align: 'justify', maxWidth: maxW });
+      } else {
+        doc.text(line, MARGIN_LEFT, y + fs * 0.35);
+      }
 
       // Find link spans that appear in this line
       for (const seg of segments) {
@@ -742,12 +781,14 @@ function drawListBatch2Col(doc: jsPDF, y: number, items: NormasBlock[], textW: n
   return Math.max(leftY, rightY) + NORMAS_PARA_GAP;
 }
 
-function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBuffer {
+function generateTextSection(blocks: NormasBlock[], headerText: string, startPage: number): ArrayBuffer {
   const doc = createContentDoc();
   let y = MARGIN_TOP;
   const textW = USABLE_W;
 
-  drawSectionHeader(doc, headerText, 1);
+  const getPageNum = () => startPage + doc.getNumberOfPages() - 1;
+
+  drawSectionHeader(doc, headerText, getPageNum());
 
   let i = 0;
   while (i < blocks.length) {
@@ -773,7 +814,7 @@ function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBu
         if (y > MARGIN_TOP) {
           doc.addPage();
           y = MARGIN_TOP;
-          drawSectionHeader(doc, headerText, doc.getNumberOfPages());
+          drawSectionHeader(doc, headerText, getPageNum());
         }
 
         // If batch still doesn't fit on a fresh page, draw it anyway (best effort)
@@ -801,7 +842,7 @@ function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBu
     if (y + requiredH > PAGE_H - MARGIN_BOTTOM) {
       doc.addPage();
       y = MARGIN_TOP;
-      drawSectionHeader(doc, headerText, doc.getNumberOfPages());
+      drawSectionHeader(doc, headerText, getPageNum());
     }
 
     y = drawBlock(doc, y, block, textW);
@@ -811,17 +852,17 @@ function generateTextSection(blocks: NormasBlock[], headerText: string): ArrayBu
   return doc.output('arraybuffer');
 }
 
-// --- Generate pages for a single province+rubro ---
+// --- Generate pages for a single zona+rubro ---
 
-function generateProvinceRubro(
-  provNombre: string,
+function generateZonaRubro(
+  zonaNombre: string,
   rubro: RubroSection,
   startPage: number,
 ): ArrayBuffer {
   const doc = createContentDoc();
   const cursor: Cursor = { col: 0, y: MARGIN_TOP };
 
-  drawHeader(doc, provNombre, rubro.nombre, startPage);
+  drawHeader(doc, zonaNombre, rubro.nombre, startPage);
 
   const getPageNum = () => startPage + doc.getNumberOfPages() - 1;
 
@@ -833,26 +874,26 @@ function generateProvinceRubro(
       doc.addPage();
       cur.col = 0;
       cur.y = MARGIN_TOP;
-      drawHeader(doc, provNombre, rubro.nombre, getPageNum());
+      drawHeader(doc, zonaNombre, rubro.nombre, getPageNum());
     }
   };
 
   let currentLoc = '';
-  const drawnLocs = new Set<string>(); // track which localidades have been drawn at least once
+  const drawnLocs = new Set<string>();
 
   for (const loc of rubro.localidades) {
     for (const esp of loc.especialidades) {
-      // Check if we need a localidad header (new localidad or column/page break)
+      // Check if we need a localidad header
       const needLocHeader = loc.nombre !== currentLoc;
       const locHeaderH = needLocHeader ? measureLocalidadHeader() : 0;
       const firstPH = esp.prestadores.length > 0 ? measurePrestador(doc, esp.prestadores[0]) : 0;
 
       if (remaining(cursor) < locHeaderH + 8 + firstPH) {
         nextCol(cursor);
-        currentLoc = ''; // Force localidad header after column break
+        currentLoc = '';
       }
 
-      // Draw localidad header if entering a new localidad (or re-entering after column break)
+      // Draw localidad header if entering a new localidad
       if (loc.nombre !== currentLoc) {
         const isCont = drawnLocs.has(loc.nombre);
         drawLocalidadHeader(doc, cursor, loc.nombre, isCont);
@@ -910,6 +951,7 @@ let poppinsRegularB64 = '';
 let poppinsBoldB64 = '';
 let poppinsItalicB64 = '';
 let poppinsBoldItalicB64 = '';
+let poppinsRegularRaw: ArrayBuffer;
 let poppinsSemiBoldRaw: ArrayBuffer;
 // Calibri (normas generales)
 let calibriRegularB64 = '';
@@ -936,6 +978,7 @@ async function loadFonts(): Promise<void> {
   poppinsBoldB64 = arrayBufferToBase64(poppinsBold);
   poppinsItalicB64 = arrayBufferToBase64(poppinsItalic);
   poppinsBoldItalicB64 = arrayBufferToBase64(poppinsBoldItalic);
+  poppinsRegularRaw = poppinsRegular;
   poppinsSemiBoldRaw = poppinsBold;
   calibriRegularB64 = arrayBufferToBase64(calibriRegular);
   calibriBoldB64 = arrayBufferToBase64(calibriBold);
@@ -987,10 +1030,44 @@ async function createProvinceCover(
   doc.registerFontkit(fontkit);
   const page = doc.getPages()[0];
 
-  // Embed Poppins-SemiBold (same font as original template)
-  const font = await doc.embedFont(poppinsSemiBoldRaw);
+  const fontRegular = await doc.embedFont(poppinsRegularRaw);
+  const fontBold = await doc.embedFont(poppinsSemiBoldRaw);
+  const brandColor = rgb(2 / 255, 54 / 255, 112 / 255); // #023670
 
-  // Cover "TUCUMÁN" with white rect (pdf-lib bottom-left origin)
+  // Cover "Plan Integra 4" with white rect (pdf-lib bottom-left origin)
+  page.drawRectangle({
+    x: 55,
+    y: 475,
+    width: 400,
+    height: 50,
+    color: rgb(1, 1, 1),
+  });
+
+  // Draw "Plan " in regular + "MS" in bold
+  const planSize = 30;
+  const planText = 'Plan ';
+  const msText = 'MS';
+  const planTextY = 490;
+  const planX = 63.39;
+
+  page.drawText(planText, {
+    x: planX,
+    y: planTextY,
+    size: planSize,
+    font: fontRegular,
+    color: brandColor,
+  });
+
+  const planWidth = fontRegular.widthOfTextAtSize(planText, planSize);
+  page.drawText(msText, {
+    x: planX + planWidth,
+    y: planTextY,
+    size: planSize,
+    font: fontBold,
+    color: brandColor,
+  });
+
+  // Cover "TUCUMÁN" with white rect
   page.drawRectangle({
     x: 55,
     y: 435,
@@ -999,16 +1076,91 @@ async function createProvinceCover(
     color: rgb(1, 1, 1),
   });
 
-  // Draw province name at baseline y=452.34, matching template exactly
+  // Draw province name
   page.drawText(provinceName.toUpperCase(), {
     x: 63.39,
     y: 452.34,
     size: 20,
-    font,
-    color: rgb(2 / 255, 54 / 255, 112 / 255), // #023670
+    font: fontBold,
+    color: brandColor,
   });
 
   return doc.save();
+}
+
+// --- Index page ---
+
+interface IndexEntry {
+  label: string;
+  pageNum: number;
+  indent?: boolean;
+  color?: [number, number, number];
+}
+
+function generateIndexPage(entries: IndexEntry[]): ArrayBuffer {
+  const doc = createContentDoc();
+  let y = MARGIN_TOP + 5;
+
+  // Title
+  doc.setFontSize(16);
+  doc.setFont('Poppins', 'bold');
+  doc.setTextColor(...COLOR_HEADER_DARK);
+  doc.text('ÍNDICE', PAGE_W / 2, y, { align: 'center' });
+  y += 12;
+
+  // Separator line
+  doc.setDrawColor(...COLOR_HEADER_DARK);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN_LEFT, y, PAGE_W - MARGIN_RIGHT, y);
+  y += 8;
+
+  const maxW = USABLE_W;
+  const dotGap = 1.2;
+
+  for (const entry of entries) {
+    const fs = entry.indent ? 9 : 11;
+    const fontStyle = entry.indent ? 'normal' : 'bold';
+    const xOffset = entry.indent ? 10 : 0;
+
+    const textColor: [number, number, number] = entry.color || COLOR_HEADER_DARK;
+
+    doc.setFontSize(fs);
+    doc.setFont('Poppins', fontStyle);
+    doc.setTextColor(...textColor);
+
+    const labelW = doc.getTextWidth(entry.label);
+    const pageText = String(entry.pageNum);
+    const pageW = doc.getTextWidth(pageText);
+
+    // Draw label
+    doc.text(entry.label, MARGIN_LEFT + xOffset, y + fs * 0.35);
+
+    // Draw page number (right-aligned)
+    doc.text(pageText, MARGIN_LEFT + maxW - pageW, y + fs * 0.35);
+
+    // Draw dotted leader between label and page number
+    doc.setFontSize(fs);
+    const dotText = '.';
+    const dotW = doc.getTextWidth(dotText);
+    let dotX = MARGIN_LEFT + xOffset + labelW + 2;
+    const dotEnd = MARGIN_LEFT + maxW - pageW - 2;
+
+    doc.setTextColor(180, 180, 180);
+    while (dotX + dotW < dotEnd) {
+      doc.text(dotText, dotX, y + fs * 0.35);
+      dotX += dotW + dotGap;
+    }
+
+    y += fs * 0.38 + (entry.indent ? 4 : 6);
+
+    // Page break if needed
+    if (y > PAGE_H - MARGIN_BOTTOM - 10) {
+      doc.addPage();
+      y = MARGIN_TOP;
+    }
+  }
+
+  return doc.output('arraybuffer');
 }
 
 // --- Main worker entry ---
@@ -1017,8 +1169,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores, textBlocks, provinciaOrder, rubroOrder } = e.data.payload;
-    const sections = groupByProvincia(prestadores, provinciaOrder, rubroOrder);
+    const { prestadores, textBlocks, provinciaOrder, zonaOrder, rubroOrder } = e.data.payload;
+    const sections = groupByProvincia(prestadores, provinciaOrder, zonaOrder, rubroOrder);
     const hasText = textBlocks && textBlocks.length > 0;
 
     // Load fonts (cached after first call)
@@ -1028,22 +1180,59 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     const [generalCoverBuf, textCoverBuf, provinciaCoverBuf] = await Promise.all([
       fetchBuffer('/Caratula-General.pdf'),
       fetchBuffer('/Caratula-ContactosServiciosCobertura.pdf'),
-      fetchBuffer('/Caratula-Integra4_provincias.pdf'),
+      fetchBuffer('/Caratula-MS_provincias.pdf'),
     ]);
 
-    // We'll build an ordered list of PDF buffers to merge
+    // ================================================================
+    // PAGE NUMBERING STRATEGY
+    // ================================================================
+    // All pages (covers, index, content) count in the absolute numbering.
+    // Covers and index don't DISPLAY a page number, but they occupy positions.
+    // Content headers show the absolute page number.
+    //
+    // We use a two-pass approach:
+    //   Pass 1: Generate all content with estimated absolute page numbers
+    //           (assuming index = 1 page). Record page counts for each part.
+    //   Pass 2: Build index entries with correct absolute page numbers,
+    //           generate the index, verify its page count, regenerate if needed.
+    // ================================================================
+
+    // Parts list and their page counts (parallel arrays)
     const parts: { label: string; buffer: ArrayBuffer | Uint8Array }[] = [];
-    // Cover pages don't count in page numbering for content headers
-    let currentPage = 1;
+    const partPages: number[] = [];
 
-    // 0. General cover (portada principal)
+    // Fixed pages before any generated content:
+    // [0] General cover = 1 page
+    // [1] Index = ? pages (assume 1, verify later)
+    const COVER_PAGES = 1;
+    let indexPageCount = 1; // initial assumption
+
+    // Absolute page counter: tracks the next available page number
+    // Starts after cover + index
+    let absPage = COVER_PAGES + indexPageCount + 1; // first page after cover+index
+
+    // 0. General cover
     parts.push({ label: 'Portada General', buffer: generalCoverBuf });
+    partPages.push(1);
 
-    // Track progress
-    const totalRubroSections = sections.reduce((sum, s) => sum + s.rubros.length, 0);
+    // Slot where the index will be inserted
+    const INDEX_SLOT = parts.length;
+
+    // Progress tracking
+    const totalZonaRubroSections = sections.reduce((sum, s) =>
+      sum + s.zonas.reduce((zSum, z) => zSum + z.rubros.length, 0), 0);
     const extraSections = hasText ? 1 : 0;
-    const totalSteps = totalRubroSections + extraSections;
+    const totalSteps = totalZonaRubroSections + extraSections;
     let stepNum = 0;
+
+    // Index tracking structures
+    interface ProvIndex {
+      name: string;
+      partIndex: number;
+      zonas: { name: string; partIndex: number }[];
+    }
+    const provinceIndices: ProvIndex[] = [];
+    let contactosPartIndex = -1;
 
     // 1. Contactos, Servicios y Cobertura section
     if (hasText) {
@@ -1053,42 +1242,128 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Contactos, Servicios y Cobertura' },
       } satisfies WorkerMessage);
 
+      // Contactos cover (1 page, no displayed page number)
+      contactosPartIndex = parts.length;
       parts.push({ label: 'Carátula Contactos, Servicios y Cobertura', buffer: textCoverBuf });
+      partPages.push(1);
+      absPage += 1; // cover occupies 1 page
 
-      const textBuffer = generateTextSection(textBlocks!, 'CONTACTOS, SERVICIOS Y COBERTURA');
-      parts.push({ label: 'Contactos, Servicios y Cobertura', buffer: textBuffer });
+      // Contactos content (page numbers displayed in headers)
+      const textBuffer = generateTextSection(textBlocks!, 'CONTACTOS, SERVICIOS Y COBERTURA', absPage);
       const loaded = await PDFDocument.load(textBuffer);
-      currentPage += loaded.getPageCount();
+      const textPageCount = loaded.getPageCount();
+      parts.push({ label: 'Contactos, Servicios y Cobertura', buffer: textBuffer });
+      partPages.push(textPageCount);
+      absPage += textPageCount;
     }
 
-    // 2. Each province: province cover, then each rubro's content
+    // 2. Each province: province cover, then each zona+rubro's content
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
 
-      // Province cover with dynamic name (one per province)
+      const provEntry: ProvIndex = { name: section.nombre, partIndex: parts.length, zonas: [] };
+
+      // Province cover (1 page, no displayed page number)
       const provCoverBytes = await createProvinceCover(provinciaCoverBuf, section.nombre);
       parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBytes });
+      partPages.push(1);
+      absPage += 1;
 
-      // Generate content for each rubro within this province
-      for (const rubro of section.rubros) {
-        stepNum++;
+      // Generate content for each zona+rubro
+      for (const zona of section.zonas) {
+        const zonaPartIndex = parts.length;
 
-        self.postMessage({
-          type: 'PROGRESS',
-          payload: {
-            phase: 'generating',
-            current: stepNum,
-            total: totalSteps,
-            message: `Generando: ${section.nombre} — ${rubro.nombre} (${rubro.localidades.length} localidades)`,
-          },
-        } satisfies WorkerMessage);
+        for (const rubro of zona.rubros) {
+          stepNum++;
 
-        const rubroBuffer = generateProvinceRubro(section.nombre, rubro, currentPage);
-        parts.push({ label: `${section.nombre} — ${rubro.nombre}`, buffer: rubroBuffer });
-        const loaded = await PDFDocument.load(rubroBuffer);
-        currentPage += loaded.getPageCount();
+          self.postMessage({
+            type: 'PROGRESS',
+            payload: {
+              phase: 'generating',
+              current: stepNum,
+              total: totalSteps,
+              message: `Generando: ${zona.nombre} — ${rubro.nombre} (${rubro.localidades.length} localidades)`,
+            },
+          } satisfies WorkerMessage);
+
+          // Content pages (page numbers displayed in headers)
+          const rubroBuffer = generateZonaRubro(zona.nombre, rubro, absPage);
+          const loaded = await PDFDocument.load(rubroBuffer);
+          const rubroPageCount = loaded.getPageCount();
+          parts.push({ label: `${zona.nombre} — ${rubro.nombre}`, buffer: rubroBuffer });
+          partPages.push(rubroPageCount);
+          absPage += rubroPageCount;
+        }
+
+        provEntry.zonas.push({ name: zona.nombre, partIndex: zonaPartIndex });
       }
+
+      provinceIndices.push(provEntry);
     }
+
+    // ================================================================
+    // 3. Generate index
+    // ================================================================
+    // Calculate absolute page for each entry in the final merged PDF.
+    // Final order: parts[0]=cover, INDEX, parts[INDEX_SLOT..end]
+    //
+    // absPageOf(partIndex) = COVER_PAGES + indexPageCount
+    //                        + sum(partPages[INDEX_SLOT .. partIndex-1])
+    //                        + 1   (this part starts on the NEXT page)
+
+    const calcAbsPageOf = (partIndex: number, idxPages: number): number => {
+      let total = COVER_PAGES + idxPages;
+      for (let p = INDEX_SLOT; p < partIndex; p++) {
+        total += partPages[p];
+      }
+      return total + 1;
+    };
+
+    const buildIndexEntries = (idxPages: number): IndexEntry[] => {
+      const entries: IndexEntry[] = [];
+      const COLOR_BLACK: [number, number, number] = [0, 0, 0];
+
+      // Contactos section
+      if (hasText && contactosPartIndex >= 0) {
+        entries.push({
+          label: 'CONTACTOS, SERVICIOS Y COBERTURA',
+          pageNum: calcAbsPageOf(contactosPartIndex, idxPages),
+        });
+      }
+
+      // Provinces and zonas
+      for (const prov of provinceIndices) {
+        entries.push({
+          label: prov.name,
+          pageNum: calcAbsPageOf(prov.partIndex, idxPages),
+        });
+        for (const zona of prov.zonas) {
+          entries.push({
+            label: zona.name,
+            pageNum: calcAbsPageOf(zona.partIndex, idxPages),
+            indent: true,
+            color: COLOR_BLACK,
+          });
+        }
+      }
+
+      return entries;
+    };
+
+    // First attempt: generate index with assumed page count
+    let indexEntries = buildIndexEntries(indexPageCount);
+    let indexBuffer = generateIndexPage(indexEntries);
+    let actualIndexPages = (await PDFDocument.load(indexBuffer)).getPageCount();
+
+    // If assumption was wrong, recalculate with correct page count
+    if (actualIndexPages !== indexPageCount) {
+      indexPageCount = actualIndexPages;
+      indexEntries = buildIndexEntries(indexPageCount);
+      indexBuffer = generateIndexPage(indexEntries);
+    }
+
+    parts.splice(INDEX_SLOT, 0, { label: 'Índice', buffer: indexBuffer });
+    partPages.splice(INDEX_SLOT, 0, indexPageCount);
 
     // Phase 2: Merge all parts
     self.postMessage({

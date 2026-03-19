@@ -22,6 +22,7 @@ export function MappingPreviewTable({ rows }: Props) {
             <th>Dirección</th>
             <th>Localidad</th>
             <th>Provincia</th>
+            <th>Zona</th>
             <th>Teléfono</th>
             <th>Subespecialidades</th>
           </tr>
@@ -36,6 +37,7 @@ export function MappingPreviewTable({ rows }: Props) {
               <td>{p.direccion || '—'}</td>
               <td>{p.localidad || '—'}</td>
               <td>{p.provincia || '—'}</td>
+              <td>{p.zona || '—'}</td>
               <td>{p.telefono || '—'}</td>
               <td>{p.subespecialidades.length > 0 ? p.subespecialidades.join(', ') : '—'}</td>
             </tr>

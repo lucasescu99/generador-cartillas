@@ -54,6 +54,7 @@ export function transformRows(
     const direccion = cleanDireccion(str(row[mapping.direccion]));
     const localidad = titleCase(cleanName(str(row[mapping.localidad])));
     const provincia = cleanName(str(row[mapping.provincia])).toUpperCase();
+    const zona = cleanName(str(row[mapping.zona])).toUpperCase();
     const especialidad = cleanName(str(row[mapping.especialidad])).toUpperCase();
     const rubro = cleanName(str(row[mapping.rubro])).toUpperCase();
     const subespecialidad = mapping.subespecialidad ? cleanName(str(row[mapping.subespecialidad])) : '';
@@ -76,6 +77,7 @@ export function transformRows(
         direccion,
         localidad,
         provincia,
+        zona,
         especialidad,
         rubro,
         nombreInsti: nombreInsti || undefined,

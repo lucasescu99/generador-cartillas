@@ -9,6 +9,7 @@ interface CartillaState {
   cartillaData: CartillaData | null;
   textBlocks: NormasBlock[] | null;
   provinciaOrder: string[];
+  zonaOrder: string[];
   rubroOrder: string[];
 }
 
@@ -17,6 +18,7 @@ interface CartillaContextType extends CartillaState {
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
   setTextBlocks: (blocks: NormasBlock[] | null) => void;
   setProvinciaOrder: (order: string[]) => void;
+  setZonaOrder: (order: string[]) => void;
   setRubroOrder: (order: string[]) => void;
   reset: () => void;
 }
@@ -27,6 +29,7 @@ const initial: CartillaState = {
   cartillaData: null,
   textBlocks: null,
   provinciaOrder: [],
+  zonaOrder: [],
   rubroOrder: [],
 };
 
@@ -44,14 +47,17 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     const cartillaData = buildCartillaData(prestadores, allRows, mapping);
     // Extract unique provinces and rubros, sorted alphabetically as default order
     const provSet = new Set<string>();
+    const zonaSet = new Set<string>();
     const rubroSet = new Set<string>();
     for (const p of prestadores) {
       provSet.add((p.provincia || 'SIN PROVINCIA').trim().toUpperCase());
+      zonaSet.add((p.zona || 'SIN ZONA').trim().toUpperCase());
       rubroSet.add(p.rubro);
     }
     const provinciaOrder = Array.from(provSet).sort((a, b) => a.localeCompare(b, 'es'));
+    const zonaOrder = Array.from(zonaSet).sort((a, b) => a.localeCompare(b, 'es'));
     const rubroOrder = Array.from(rubroSet).sort((a, b) => a.localeCompare(b, 'es'));
-    setState((prev) => ({ ...prev, mapping, cartillaData, provinciaOrder, rubroOrder }));
+    setState((prev) => ({ ...prev, mapping, cartillaData, provinciaOrder, zonaOrder, rubroOrder }));
   }, []);
 
   const setTextBlocks = useCallback((textBlocks: NormasBlock[] | null) => {
@@ -62,6 +68,10 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, provinciaOrder }));
   }, []);
 
+  const setZonaOrder = useCallback((zonaOrder: string[]) => {
+    setState((prev) => ({ ...prev, zonaOrder }));
+  }, []);
+
   const setRubroOrder = useCallback((rubroOrder: string[]) => {
     setState((prev) => ({ ...prev, rubroOrder }));
   }, []);
@@ -69,7 +79,7 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setProvinciaOrder, setRubroOrder, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setProvinciaOrder, setZonaOrder, setRubroOrder, reset }}>
       {children}
     </CartillaContext.Provider>
   );

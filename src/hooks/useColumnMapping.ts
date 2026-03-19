@@ -15,6 +15,7 @@ export const MAPPING_FIELDS: MappingField[] = [
   { key: 'localidad', label: 'Localidad', required: true },
   { key: 'provincia', label: 'Provincia', required: true },
   { key: 'rubro', label: 'Rubro', required: true },
+  { key: 'zona', label: 'Zona', required: true },
   { key: 'codigo', label: 'Código Prestador', required: false },
   { key: 'subespecialidad', label: 'Subespecialidad', required: false },
   { key: 'nombreInsti', label: 'Nombre Institución', required: false },
@@ -43,6 +44,7 @@ function autoDetect(headers: string[]): Partial<ColumnMapping> {
   tryMatch('direccion', 'direccion', 'address', 'dir');
   tryMatch('localidad', 'localidad', 'ciudad', 'city');
   tryMatch('provincia', 'provincia', 'state', 'prov');
+  tryMatch('zona', 'zona', 'zone', 'region');
   tryMatch('codigo', 'prestador', 'codigo', 'code', 'id');
   tryMatch('rubro', 'rubro_nombre', 'rubro', 'category');
   tryMatch('nombreInsti', 'nombre_insti', 'institucion', 'institution');

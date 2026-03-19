@@ -1,5 +1,5 @@
 .container {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 32px 24px;
 }
@@ -39,7 +39,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 24px;
 }
 
@@ -131,4 +131,24 @@
 
 .continueBtn:hover {
   background: var(--color-primary-dark);
+}
+
+.itemClickable {
+  cursor: pointer;
+}
+
+.itemClickable:hover {
+  border-color: var(--color-primary);
+}
+
+.itemSelected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light, #e8f0fe);
+}
+
+.emptyMsg {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 12px;
+  text-align: center;
 }
