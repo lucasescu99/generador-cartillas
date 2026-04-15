@@ -1102,8 +1102,13 @@ async function createPlanOperativoCover(templateBuffer: ArrayBuffer): Promise<Ui
   const line1Y = pageH * 0.65;
   const line2Y = line1Y - size * 1.15;
 
-  page.drawText(line1, { x, y: line1Y, size, font: fontBold, color: brandColor });
-  page.drawText(line2, { x, y: line2Y, size, font: fontBold, color: brandColor });
+  // Simulate a bolder weight by drawing the glyphs twice at a small horizontal
+  // offset (Poppins-Bold is not loaded in the worker; SemiBold alone is thinner
+  // than the original template's title).
+  for (const dx of [0, 0.7]) {
+    page.drawText(line1, { x: x + dx, y: line1Y, size, font: fontBold, color: brandColor });
+    page.drawText(line2, { x: x + dx, y: line2Y, size, font: fontBold, color: brandColor });
+  }
 
   return doc.save();
 }
