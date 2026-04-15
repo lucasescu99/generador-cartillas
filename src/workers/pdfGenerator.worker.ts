@@ -935,6 +935,58 @@ async function fetchBuffer(url: string): Promise<ArrayBuffer> {
   return res.arrayBuffer();
 }
 
+async function tryFetchBuffer(url: string): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
+// Province name → pre-rendered cover filename (without extension).
+// Keys are the province name with accents stripped, spaces removed, uppercased.
+const PROVINCE_COVER_MAP: Record<string, string> = {
+  BUENOSAIRES: 'Caratula-MS_BuenosAires',
+  CABA: 'Caratula-MS_CABAyAMBA',
+  CAPITALFEDERAL: 'Caratula-MS_CABAyAMBA',
+  CIUDADDEBUENOSAIRES: 'Caratula-MS_CABAyAMBA',
+  CIUDADAUTONOMADEBUENOSAIRES: 'Caratula-MS_CABAyAMBA',
+  AMBA: 'Caratula-MS_CABAyAMBA',
+  CATAMARCA: 'Caratula-MS_Catamarca',
+  CHACO: 'Caratula-MS_Chaco',
+  CHUBUT: 'Caratula-MS_Chubut',
+  CORDOBA: 'Caratula-MS_Cordoba',
+  CORRIENTES: 'Caratula-MS_Corrientes',
+  ENTRERIOS: 'Caratula-MS_EntreRios',
+  FORMOSA: 'Caratula-MS_Formosa',
+  JUJUY: 'Caratula-MS_Jujuy',
+  LAPAMPA: 'Caratula-MS_LaPampa',
+  LARIOJA: 'Caratula-MS_LaRioja',
+  MENDOZA: 'Caratula-MS_Mendoza',
+  MISIONES: 'Caratula-MS_Misiones',
+  NEUQUEN: 'Caratula-MS_Neuquen',
+  RIONEGRO: 'Caratula-MS_RioNegro',
+  SALTA: 'Caratula-MS_Salta',
+  SANJUAN: 'Caratula-MS_SanJuan',
+  SANLUIS: 'Caratula-MS_SanLuis',
+  SANTACRUZ: 'Caratula-MS_SantaCruz',
+  SANTAFE: 'Caratula-MS_SantaFe',
+  SANTIAGODELESTERO: 'Caratula-MS_SantiagoDelEstero',
+  TIERRADELFUEGO: 'Caratula-MS_TierraDelFuego',
+  TUCUMAN: 'Caratula-MS_Tucuman',
+};
+
+function provinceCoverFilename(provinceName: string): string | null {
+  const key = provinceName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+  return PROVINCE_COVER_MAP[key] ?? null;
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -1263,9 +1315,18 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       const provEntry: ProvIndex = { name: section.nombre, partIndex: parts.length, zonas: [] };
 
-      // Province cover (1 page, no displayed page number)
-      const provCoverBytes = await createProvinceCover(provinciaCoverBuf, section.nombre);
-      parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBytes });
+      // Province cover (1 page, no displayed page number).
+      // Prefer a pre-rendered per-province PDF; fall back to the shared template
+      // with the province name overlaid as text.
+      const coverFilename = provinceCoverFilename(section.nombre);
+      let provCoverBuffer: ArrayBuffer | Uint8Array | null = null;
+      if (coverFilename) {
+        provCoverBuffer = await tryFetchBuffer(`/${coverFilename}.pdf`);
+      }
+      if (!provCoverBuffer) {
+        provCoverBuffer = await createProvinceCover(provinciaCoverBuf, section.nombre);
+      }
+      parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBuffer });
       partPages.push(1);
       absPage += 1;
 
