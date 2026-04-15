@@ -1074,45 +1074,6 @@ function createContentDoc(): jsPDF {
 
 // --- Cover page helpers ---
 
-async function createPlanOperativoCover(templateBuffer: ArrayBuffer): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(templateBuffer);
-  doc.registerFontkit(fontkit);
-  const page = doc.getPages()[0];
-  const { width: pageW, height: pageH } = page.getSize();
-
-  const fontBold = await doc.embedFont(poppinsSemiBoldRaw);
-  const brandColor = rgb(2 / 255, 54 / 255, 112 / 255); // #023670
-
-  // Cover the existing "Contactos, Servicios y Cobertura." title (two lines)
-  // with a white rectangle. pdf-lib origin is bottom-left.
-  page.drawRectangle({
-    x: 0,
-    y: pageH * 0.58,
-    width: pageW,
-    height: pageH * 0.16,
-    color: rgb(1, 1, 1),
-  });
-
-  // Draw new title, wrapped to two lines to match the original layout
-  // (first line where "Contactos, Servicios" used to be).
-  const line1 = 'Plan de Implementación';
-  const line2 = 'Operativa.';
-  const size = 36;
-  const x = 55;
-  const line1Y = pageH * 0.65;
-  const line2Y = line1Y - size * 1.15;
-
-  // Simulate a bolder weight by drawing the glyphs twice at a small horizontal
-  // offset (Poppins-Bold is not loaded in the worker; SemiBold alone is thinner
-  // than the original template's title).
-  for (const dx of [0, 0.7]) {
-    page.drawText(line1, { x: x + dx, y: line1Y, size, font: fontBold, color: brandColor });
-    page.drawText(line2, { x: x + dx, y: line2Y, size, font: fontBold, color: brandColor });
-  }
-
-  return doc.save();
-}
-
 async function createProvinceCover(
   templateBuffer: ArrayBuffer,
   provinceName: string,
@@ -1272,9 +1233,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     await loadFonts();
 
     // Fetch cover PDFs
-    const [generalCoverBuf, textCoverBuf, provinciaCoverBuf] = await Promise.all([
+    const [generalCoverBuf, textCoverBuf, planCoverBuf, provinciaCoverBuf] = await Promise.all([
       fetchBuffer('/Caratula-General.pdf'),
       fetchBuffer('/Caratula-ContactosServiciosCobertura.pdf'),
+      fetchBuffer('/Caratula-PlanImplementacionOperativa.pdf'),
       fetchBuffer('/Caratula-MS_provincias.pdf'),
     ]);
 
@@ -1340,8 +1302,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         } satisfies WorkerMessage);
 
         planPartIndex = parts.length;
-        const planCoverBytes = await createPlanOperativoCover(textCoverBuf);
-        parts.push({ label: 'Carátula Plan de Implementación Operativa', buffer: planCoverBytes });
+        parts.push({ label: 'Carátula Plan de Implementación Operativa', buffer: planCoverBuf });
         partPages.push(1);
         absPage += 1;
 
