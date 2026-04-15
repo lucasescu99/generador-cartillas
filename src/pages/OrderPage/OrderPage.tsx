@@ -1,7 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useCartilla } from '../../context/CartillaContext';
+import type { SectionKey } from '../../types/cartilla.types';
 import styles from './OrderPage.module.css';
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  plan: 'Plan de Implementación Operativa',
+  contactos: 'Contactos, Servicios y Cobertura',
+  provincias: 'Provincias',
+};
 
 function moveItem(arr: string[], from: number, to: number): string[] {
   const next = [...arr];
@@ -86,8 +93,22 @@ function SelectableOrderList({ items, selected, onSelect, onChange }: Selectable
 
 export function OrderPage() {
   const navigate = useNavigate();
-  const { cartillaData, provinciaOrder, zonaOrder, rubroOrder, setProvinciaOrder, setZonaOrder, setRubroOrder } = useCartilla();
+  const { cartillaData, textBlocks, planOperativoBlocks, sectionOrder, setSectionOrder, provinciaOrder, zonaOrder, rubroOrder, setProvinciaOrder, setZonaOrder, setRubroOrder } = useCartilla();
   const [selectedProv, setSelectedProv] = useState<string | null>(null);
+
+  const availableSections = useMemo<SectionKey[]>(() => {
+    return sectionOrder.filter((key) => {
+      if (key === 'plan') return !!planOperativoBlocks && planOperativoBlocks.length > 0;
+      if (key === 'contactos') return !!textBlocks && textBlocks.length > 0;
+      return true;
+    });
+  }, [sectionOrder, planOperativoBlocks, textBlocks]);
+
+  const handleSectionReorder = (reordered: SectionKey[]) => {
+    // Keep hidden sections in their relative spots by merging back
+    const hidden = sectionOrder.filter((k) => !availableSections.includes(k));
+    setSectionOrder([...reordered, ...hidden]);
+  };
 
   // Compute which zonas belong to each province
   const zonasByProv = useMemo(() => {
@@ -140,9 +161,49 @@ export function OrderPage() {
       </div>
 
       <p className={styles.subtitle}>
-        Ordena las provincias, zonas y rubros como quieras que aparezcan en el PDF.
+        Ordena las secciones del PDF, las provincias, zonas y rubros como quieras que aparezcan.
         Selecciona una provincia para ver sus zonas.
       </p>
+
+      <div className={styles.sectionCard}>
+        <h2 className={styles.cardTitle}>Secciones del PDF ({availableSections.length})</h2>
+        {availableSections.length > 0 ? (
+          <ul className={styles.list}>
+            {availableSections.map((key, i) => (
+              <li key={key} className={styles.item}>
+                <span className={styles.itemIndex}>{i + 1}</span>
+                <span className={styles.itemName}>{SECTION_LABELS[key]}</span>
+                <button
+                  className={styles.moveBtn}
+                  disabled={i === 0}
+                  onClick={() => {
+                    const next = [...availableSections];
+                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                    handleSectionReorder(next);
+                  }}
+                  title="Subir"
+                >
+                  ▲
+                </button>
+                <button
+                  className={styles.moveBtn}
+                  disabled={i === availableSections.length - 1}
+                  onClick={() => {
+                    const next = [...availableSections];
+                    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                    handleSectionReorder(next);
+                  }}
+                  title="Bajar"
+                >
+                  ▼
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.emptyMsg}>No hay secciones disponibles</p>
+        )}
+      </div>
 
       <div className={styles.grid}>
         <div className={styles.card}>

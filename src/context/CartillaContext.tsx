@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import type { ColumnMapping, ParsedFile, CartillaData, NormasBlock } from '../types/cartilla.types';
+import type { ColumnMapping, ParsedFile, CartillaData, NormasBlock, SectionKey } from '../types/cartilla.types';
+
+const DEFAULT_SECTION_ORDER: SectionKey[] = ['plan', 'contactos', 'provincias'];
 import { transformRows, buildCartillaData } from '../services/dataTransformer.service';
 
 interface CartillaState {
@@ -9,6 +11,7 @@ interface CartillaState {
   cartillaData: CartillaData | null;
   textBlocks: NormasBlock[] | null;
   planOperativoBlocks: NormasBlock[] | null;
+  sectionOrder: SectionKey[];
   provinciaOrder: string[];
   zonaOrder: string[];
   rubroOrder: string[];
@@ -19,6 +22,7 @@ interface CartillaContextType extends CartillaState {
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
   setTextBlocks: (blocks: NormasBlock[] | null) => void;
   setPlanOperativoBlocks: (blocks: NormasBlock[] | null) => void;
+  setSectionOrder: (order: SectionKey[]) => void;
   setProvinciaOrder: (order: string[]) => void;
   setZonaOrder: (order: string[]) => void;
   setRubroOrder: (order: string[]) => void;
@@ -31,6 +35,7 @@ const initial: CartillaState = {
   cartillaData: null,
   textBlocks: null,
   planOperativoBlocks: null,
+  sectionOrder: DEFAULT_SECTION_ORDER,
   provinciaOrder: [],
   zonaOrder: [],
   rubroOrder: [],
@@ -71,6 +76,10 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, planOperativoBlocks }));
   }, []);
 
+  const setSectionOrder = useCallback((sectionOrder: SectionKey[]) => {
+    setState((prev) => ({ ...prev, sectionOrder }));
+  }, []);
+
   const setProvinciaOrder = useCallback((provinciaOrder: string[]) => {
     setState((prev) => ({ ...prev, provinciaOrder }));
   }, []);
@@ -86,7 +95,7 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setPlanOperativoBlocks, setProvinciaOrder, setZonaOrder, setRubroOrder, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setPlanOperativoBlocks, setSectionOrder, setProvinciaOrder, setZonaOrder, setRubroOrder, reset }}>
       {children}
     </CartillaContext.Provider>
   );

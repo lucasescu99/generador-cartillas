@@ -63,8 +63,10 @@ export interface NormasBlock {
   tableFlags?: { isHeader: boolean; isFirst: boolean; isLast: boolean };
 }
 
+export type SectionKey = 'plan' | 'contactos' | 'provincias';
+
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; planOperativoBlocks?: NormasBlock[]; provinciaOrder?: string[]; zonaOrder?: string[]; rubroOrder?: string[] } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; planOperativoBlocks?: NormasBlock[]; sectionOrder?: SectionKey[]; provinciaOrder?: string[]; zonaOrder?: string[]; rubroOrder?: string[] } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };

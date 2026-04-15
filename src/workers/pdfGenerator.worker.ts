@@ -3,7 +3,7 @@ import { PDFDocument, rgb } from 'pdf-lib';
 // @ts-ignore fontkit CJS/ESM interop
 import _fontkit from '@pdf-lib/fontkit';
 const fontkit: any = (_fontkit as any).default || _fontkit;
-import type { Prestador, NormasBlock, NormasSpan, WorkerMessage } from '../types/cartilla.types';
+import type { Prestador, NormasBlock, NormasSpan, SectionKey, WorkerMessage } from '../types/cartilla.types';
 
 // --- Layout constants (mm) ---
 const PAGE_H = 297;
@@ -1260,10 +1260,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores, textBlocks, planOperativoBlocks, provinciaOrder, zonaOrder, rubroOrder } = e.data.payload;
+    const { prestadores, textBlocks, planOperativoBlocks, sectionOrder, provinciaOrder, zonaOrder, rubroOrder } = e.data.payload;
     const sections = groupByProvincia(prestadores, provinciaOrder, zonaOrder, rubroOrder);
     const hasText = textBlocks && textBlocks.length > 0;
     const hasPlan = planOperativoBlocks && planOperativoBlocks.length > 0;
+    const order: SectionKey[] = sectionOrder && sectionOrder.length > 0
+      ? sectionOrder
+      : ['plan', 'contactos', 'provincias'];
 
     // Load fonts (cached after first call)
     await loadFonts();
@@ -1327,102 +1330,95 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     let planPartIndex = -1;
     let contactosPartIndex = -1;
 
-    // 1. Plan de Implementación Operativa (goes right after the index)
-    if (hasPlan) {
-      stepNum++;
-      self.postMessage({
-        type: 'PROGRESS',
-        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Plan de Implementación Operativa' },
-      } satisfies WorkerMessage);
+    // Iterate top-level sections in the order requested by the user.
+    for (const sectionKey of order) {
+      if (sectionKey === 'plan' && hasPlan) {
+        stepNum++;
+        self.postMessage({
+          type: 'PROGRESS',
+          payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Plan de Implementación Operativa' },
+        } satisfies WorkerMessage);
 
-      planPartIndex = parts.length;
-      const planCoverBytes = await createPlanOperativoCover(textCoverBuf);
-      parts.push({ label: 'Carátula Plan de Implementación Operativa', buffer: planCoverBytes });
-      partPages.push(1);
-      absPage += 1;
+        planPartIndex = parts.length;
+        const planCoverBytes = await createPlanOperativoCover(textCoverBuf);
+        parts.push({ label: 'Carátula Plan de Implementación Operativa', buffer: planCoverBytes });
+        partPages.push(1);
+        absPage += 1;
 
-      const planBuffer = generateTextSection(planOperativoBlocks!, 'PLAN DE IMPLEMENTACIÓN OPERATIVA', absPage);
-      const loaded = await PDFDocument.load(planBuffer);
-      const planPageCount = loaded.getPageCount();
-      parts.push({ label: 'Plan de Implementación Operativa', buffer: planBuffer });
-      partPages.push(planPageCount);
-      absPage += planPageCount;
-    }
+        const planBuffer = generateTextSection(planOperativoBlocks!, 'PLAN DE IMPLEMENTACIÓN OPERATIVA', absPage);
+        const loaded = await PDFDocument.load(planBuffer);
+        const planPageCount = loaded.getPageCount();
+        parts.push({ label: 'Plan de Implementación Operativa', buffer: planBuffer });
+        partPages.push(planPageCount);
+        absPage += planPageCount;
+      } else if (sectionKey === 'contactos' && hasText) {
+        stepNum++;
+        self.postMessage({
+          type: 'PROGRESS',
+          payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Contactos, Servicios y Cobertura' },
+        } satisfies WorkerMessage);
 
-    // 2. Contactos, Servicios y Cobertura section
-    if (hasText) {
-      stepNum++;
-      self.postMessage({
-        type: 'PROGRESS',
-        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Contactos, Servicios y Cobertura' },
-      } satisfies WorkerMessage);
+        contactosPartIndex = parts.length;
+        parts.push({ label: 'Carátula Contactos, Servicios y Cobertura', buffer: textCoverBuf });
+        partPages.push(1);
+        absPage += 1;
 
-      // Contactos cover (1 page, no displayed page number)
-      contactosPartIndex = parts.length;
-      parts.push({ label: 'Carátula Contactos, Servicios y Cobertura', buffer: textCoverBuf });
-      partPages.push(1);
-      absPage += 1; // cover occupies 1 page
+        const textBuffer = generateTextSection(textBlocks!, 'CONTACTOS, SERVICIOS Y COBERTURA', absPage);
+        const loaded = await PDFDocument.load(textBuffer);
+        const textPageCount = loaded.getPageCount();
+        parts.push({ label: 'Contactos, Servicios y Cobertura', buffer: textBuffer });
+        partPages.push(textPageCount);
+        absPage += textPageCount;
+      } else if (sectionKey === 'provincias') {
+        for (let i = 0; i < sections.length; i++) {
+          const section = sections[i];
 
-      // Contactos content (page numbers displayed in headers)
-      const textBuffer = generateTextSection(textBlocks!, 'CONTACTOS, SERVICIOS Y COBERTURA', absPage);
-      const loaded = await PDFDocument.load(textBuffer);
-      const textPageCount = loaded.getPageCount();
-      parts.push({ label: 'Contactos, Servicios y Cobertura', buffer: textBuffer });
-      partPages.push(textPageCount);
-      absPage += textPageCount;
-    }
+          const provEntry: ProvIndex = { name: section.nombre, partIndex: parts.length, zonas: [] };
 
-    // 2. Each province: province cover, then each zona+rubro's content
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i];
+          // Province cover: prefer pre-rendered per-province PDF, fall back to
+          // overlay template.
+          const coverFilename = provinceCoverFilename(section.nombre);
+          let provCoverBuffer: ArrayBuffer | Uint8Array | null = null;
+          if (coverFilename) {
+            provCoverBuffer = await tryFetchBuffer(`/${coverFilename}.pdf`);
+          }
+          if (!provCoverBuffer) {
+            provCoverBuffer = await createProvinceCover(provinciaCoverBuf, section.nombre);
+          }
+          parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBuffer });
+          partPages.push(1);
+          absPage += 1;
 
-      const provEntry: ProvIndex = { name: section.nombre, partIndex: parts.length, zonas: [] };
+          for (const zona of section.zonas) {
+            const zonaPartIndex = parts.length;
 
-      // Province cover (1 page, no displayed page number).
-      // Prefer a pre-rendered per-province PDF; fall back to the shared template
-      // with the province name overlaid as text.
-      const coverFilename = provinceCoverFilename(section.nombre);
-      let provCoverBuffer: ArrayBuffer | Uint8Array | null = null;
-      if (coverFilename) {
-        provCoverBuffer = await tryFetchBuffer(`/${coverFilename}.pdf`);
-      }
-      if (!provCoverBuffer) {
-        provCoverBuffer = await createProvinceCover(provinciaCoverBuf, section.nombre);
-      }
-      parts.push({ label: `Carátula ${section.nombre}`, buffer: provCoverBuffer });
-      partPages.push(1);
-      absPage += 1;
+            for (const rubro of zona.rubros) {
+              stepNum++;
 
-      // Generate content for each zona+rubro
-      for (const zona of section.zonas) {
-        const zonaPartIndex = parts.length;
+              self.postMessage({
+                type: 'PROGRESS',
+                payload: {
+                  phase: 'generating',
+                  current: stepNum,
+                  total: totalSteps,
+                  message: `Generando: ${zona.nombre} — ${rubro.nombre} (${rubro.localidades.length} localidades)`,
+                },
+              } satisfies WorkerMessage);
 
-        for (const rubro of zona.rubros) {
-          stepNum++;
+              const rubroBuffer = generateZonaRubro(zona.nombre, rubro, absPage);
+              const loaded = await PDFDocument.load(rubroBuffer);
+              const rubroPageCount = loaded.getPageCount();
+              parts.push({ label: `${zona.nombre} — ${rubro.nombre}`, buffer: rubroBuffer });
+              partPages.push(rubroPageCount);
+              absPage += rubroPageCount;
+            }
 
-          self.postMessage({
-            type: 'PROGRESS',
-            payload: {
-              phase: 'generating',
-              current: stepNum,
-              total: totalSteps,
-              message: `Generando: ${zona.nombre} — ${rubro.nombre} (${rubro.localidades.length} localidades)`,
-            },
-          } satisfies WorkerMessage);
+            provEntry.zonas.push({ name: zona.nombre, partIndex: zonaPartIndex });
+          }
 
-          // Content pages (page numbers displayed in headers)
-          const rubroBuffer = generateZonaRubro(zona.nombre, rubro, absPage);
-          const loaded = await PDFDocument.load(rubroBuffer);
-          const rubroPageCount = loaded.getPageCount();
-          parts.push({ label: `${zona.nombre} — ${rubro.nombre}`, buffer: rubroBuffer });
-          partPages.push(rubroPageCount);
-          absPage += rubroPageCount;
+          provinceIndices.push(provEntry);
         }
-
-        provEntry.zonas.push({ name: zona.nombre, partIndex: zonaPartIndex });
       }
-
-      provinceIndices.push(provEntry);
     }
 
     // ================================================================
@@ -1447,35 +1443,32 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const entries: IndexEntry[] = [];
       const COLOR_BLACK: [number, number, number] = [0, 0, 0];
 
-      // Plan de Implementación Operativa section
-      if (hasPlan && planPartIndex >= 0) {
-        entries.push({
-          label: 'PLAN DE IMPLEMENTACIÓN OPERATIVA',
-          pageNum: calcAbsPageOf(planPartIndex, idxPages),
-        });
-      }
-
-      // Contactos section
-      if (hasText && contactosPartIndex >= 0) {
-        entries.push({
-          label: 'CONTACTOS, SERVICIOS Y COBERTURA',
-          pageNum: calcAbsPageOf(contactosPartIndex, idxPages),
-        });
-      }
-
-      // Provinces and zonas
-      for (const prov of provinceIndices) {
-        entries.push({
-          label: prov.name,
-          pageNum: calcAbsPageOf(prov.partIndex, idxPages),
-        });
-        for (const zona of prov.zonas) {
+      for (const sectionKey of order) {
+        if (sectionKey === 'plan' && hasPlan && planPartIndex >= 0) {
           entries.push({
-            label: zona.name,
-            pageNum: calcAbsPageOf(zona.partIndex, idxPages),
-            indent: true,
-            color: COLOR_BLACK,
+            label: 'PLAN DE IMPLEMENTACIÓN OPERATIVA',
+            pageNum: calcAbsPageOf(planPartIndex, idxPages),
           });
+        } else if (sectionKey === 'contactos' && hasText && contactosPartIndex >= 0) {
+          entries.push({
+            label: 'CONTACTOS, SERVICIOS Y COBERTURA',
+            pageNum: calcAbsPageOf(contactosPartIndex, idxPages),
+          });
+        } else if (sectionKey === 'provincias') {
+          for (const prov of provinceIndices) {
+            entries.push({
+              label: prov.name,
+              pageNum: calcAbsPageOf(prov.partIndex, idxPages),
+            });
+            for (const zona of prov.zonas) {
+              entries.push({
+                label: zona.name,
+                pageNum: calcAbsPageOf(zona.partIndex, idxPages),
+                indent: true,
+                color: COLOR_BLACK,
+              });
+            }
+          }
         }
       }
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Prestador, NormasBlock, WorkerMessage } from '../types/cartilla.types';
+import type { Prestador, NormasBlock, SectionKey, WorkerMessage } from '../types/cartilla.types';
 import PdfWorker from '../workers/pdfGenerator.worker?worker';
 
 export interface Progress {
@@ -34,7 +34,7 @@ export function usePdfGenerator() {
     };
   }, [pdfUrl]);
 
-  const start = useCallback((prestadores: Prestador[], textBlocks?: NormasBlock[] | null, planOperativoBlocks?: NormasBlock[] | null, provinciaOrder?: string[], zonaOrder?: string[], rubroOrder?: string[]) => {
+  const start = useCallback((prestadores: Prestador[], textBlocks?: NormasBlock[] | null, planOperativoBlocks?: NormasBlock[] | null, sectionOrder?: SectionKey[], provinciaOrder?: string[], zonaOrder?: string[], rubroOrder?: string[]) => {
     setStatus('generating');
     setProgress({ phase: 'generating', current: 0, total: 0, message: 'Iniciando...' });
     setMetadata(null);
@@ -80,6 +80,7 @@ export function usePdfGenerator() {
         prestadores,
         textBlocks: textBlocks || undefined,
         planOperativoBlocks: planOperativoBlocks || undefined,
+        sectionOrder: sectionOrder || undefined,
         provinciaOrder: provinciaOrder || undefined,
         zonaOrder: zonaOrder || undefined,
         rubroOrder: rubroOrder || undefined,
