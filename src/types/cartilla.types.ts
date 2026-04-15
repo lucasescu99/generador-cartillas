@@ -64,7 +64,7 @@ export interface NormasBlock {
 }
 
 export type WorkerMessage =
-  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; provinciaOrder?: string[]; zonaOrder?: string[]; rubroOrder?: string[] } }
+  | { type: 'START'; payload: { prestadores: Prestador[]; textBlocks?: NormasBlock[]; planOperativoBlocks?: NormasBlock[]; provinciaOrder?: string[]; zonaOrder?: string[]; rubroOrder?: string[] } }
   | { type: 'PROGRESS'; payload: { phase: 'generating' | 'merging'; current: number; total: number; message: string } }
   | { type: 'COMPLETE'; payload: { blob: Blob; pageCount: number; sizeKb: number } }
   | { type: 'ERROR'; payload: { message: string } };

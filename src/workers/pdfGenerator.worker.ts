@@ -1074,6 +1074,41 @@ function createContentDoc(): jsPDF {
 
 // --- Cover page helpers ---
 
+async function createPlanOperativoCover(templateBuffer: ArrayBuffer): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(templateBuffer);
+  doc.registerFontkit(fontkit);
+  const page = doc.getPages()[0];
+  const { width: pageW, height: pageH } = page.getSize();
+
+  const fontBold = await doc.embedFont(poppinsSemiBoldRaw);
+  const brandColor = rgb(2 / 255, 54 / 255, 112 / 255); // #023670
+
+  // Cover the existing "Contactos, Servicios y Cobertura." title with a white
+  // rectangle (pdf-lib origin is bottom-left). The template's title occupies
+  // roughly the middle band of the page.
+  page.drawRectangle({
+    x: 0,
+    y: pageH * 0.44,
+    width: pageW,
+    height: pageH * 0.16,
+    color: rgb(1, 1, 1),
+  });
+
+  // Draw new title, wrapped to two lines to match the visual rhythm of the
+  // original cover.
+  const line1 = 'Plan de Implementación';
+  const line2 = 'Operativa.';
+  const size = 36;
+  const x = 55;
+  const line1Y = pageH * 0.52;
+  const line2Y = line1Y - size * 1.15;
+
+  page.drawText(line1, { x, y: line1Y, size, font: fontBold, color: brandColor });
+  page.drawText(line2, { x, y: line2Y, size, font: fontBold, color: brandColor });
+
+  return doc.save();
+}
+
 async function createProvinceCover(
   templateBuffer: ArrayBuffer,
   provinceName: string,
@@ -1221,9 +1256,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   if (e.data.type !== 'START') return;
 
   try {
-    const { prestadores, textBlocks, provinciaOrder, zonaOrder, rubroOrder } = e.data.payload;
+    const { prestadores, textBlocks, planOperativoBlocks, provinciaOrder, zonaOrder, rubroOrder } = e.data.payload;
     const sections = groupByProvincia(prestadores, provinciaOrder, zonaOrder, rubroOrder);
     const hasText = textBlocks && textBlocks.length > 0;
+    const hasPlan = planOperativoBlocks && planOperativoBlocks.length > 0;
 
     // Load fonts (cached after first call)
     await loadFonts();
@@ -1273,7 +1309,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     // Progress tracking
     const totalZonaRubroSections = sections.reduce((sum, s) =>
       sum + s.zonas.reduce((zSum, z) => zSum + z.rubros.length, 0), 0);
-    const extraSections = hasText ? 1 : 0;
+    const extraSections = (hasText ? 1 : 0) + (hasPlan ? 1 : 0);
     const totalSteps = totalZonaRubroSections + extraSections;
     let stepNum = 0;
 
@@ -1284,9 +1320,32 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       zonas: { name: string; partIndex: number }[];
     }
     const provinceIndices: ProvIndex[] = [];
+    let planPartIndex = -1;
     let contactosPartIndex = -1;
 
-    // 1. Contactos, Servicios y Cobertura section
+    // 1. Plan de Implementación Operativa (goes right after the index)
+    if (hasPlan) {
+      stepNum++;
+      self.postMessage({
+        type: 'PROGRESS',
+        payload: { phase: 'generating', current: stepNum, total: totalSteps, message: 'Generando: Plan de Implementación Operativa' },
+      } satisfies WorkerMessage);
+
+      planPartIndex = parts.length;
+      const planCoverBytes = await createPlanOperativoCover(textCoverBuf);
+      parts.push({ label: 'Carátula Plan de Implementación Operativa', buffer: planCoverBytes });
+      partPages.push(1);
+      absPage += 1;
+
+      const planBuffer = generateTextSection(planOperativoBlocks!, 'PLAN DE IMPLEMENTACIÓN OPERATIVA', absPage);
+      const loaded = await PDFDocument.load(planBuffer);
+      const planPageCount = loaded.getPageCount();
+      parts.push({ label: 'Plan de Implementación Operativa', buffer: planBuffer });
+      partPages.push(planPageCount);
+      absPage += planPageCount;
+    }
+
+    // 2. Contactos, Servicios y Cobertura section
     if (hasText) {
       stepNum++;
       self.postMessage({
@@ -1383,6 +1442,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     const buildIndexEntries = (idxPages: number): IndexEntry[] => {
       const entries: IndexEntry[] = [];
       const COLOR_BLACK: [number, number, number] = [0, 0, 0];
+
+      // Plan de Implementación Operativa section
+      if (hasPlan && planPartIndex >= 0) {
+        entries.push({
+          label: 'PLAN DE IMPLEMENTACIÓN OPERATIVA',
+          pageNum: calcAbsPageOf(planPartIndex, idxPages),
+        });
+      }
 
       // Contactos section
       if (hasText && contactosPartIndex >= 0) {

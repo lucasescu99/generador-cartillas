@@ -7,15 +7,15 @@ import styles from './PreviewPage.module.css';
 
 export function PreviewPage() {
   const navigate = useNavigate();
-  const { cartillaData, textBlocks, provinciaOrder, zonaOrder, rubroOrder, reset } = useCartilla();
+  const { cartillaData, textBlocks, planOperativoBlocks, provinciaOrder, zonaOrder, rubroOrder, reset } = useCartilla();
   const { start, progress, status, download, metadata, errorMessage, pdfUrl } = usePdfGenerator();
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current || !cartillaData || cartillaData.prestadores.length === 0) return;
     started.current = true;
-    start(cartillaData.prestadores, textBlocks, provinciaOrder, zonaOrder, rubroOrder);
-  }, [cartillaData, textBlocks, provinciaOrder, zonaOrder, rubroOrder, start]);
+    start(cartillaData.prestadores, textBlocks, planOperativoBlocks, provinciaOrder, zonaOrder, rubroOrder);
+  }, [cartillaData, textBlocks, planOperativoBlocks, provinciaOrder, zonaOrder, rubroOrder, start]);
 
   if (!cartillaData || cartillaData.prestadores.length === 0) {
     return <Navigate to="/" replace />;

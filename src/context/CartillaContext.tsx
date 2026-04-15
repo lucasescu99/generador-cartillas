@@ -8,6 +8,7 @@ interface CartillaState {
   mapping: ColumnMapping | null;
   cartillaData: CartillaData | null;
   textBlocks: NormasBlock[] | null;
+  planOperativoBlocks: NormasBlock[] | null;
   provinciaOrder: string[];
   zonaOrder: string[];
   rubroOrder: string[];
@@ -17,6 +18,7 @@ interface CartillaContextType extends CartillaState {
   setParsedFile: (file: ParsedFile) => void;
   applyMapping: (mapping: ColumnMapping, allRows: Record<string, unknown>[]) => void;
   setTextBlocks: (blocks: NormasBlock[] | null) => void;
+  setPlanOperativoBlocks: (blocks: NormasBlock[] | null) => void;
   setProvinciaOrder: (order: string[]) => void;
   setZonaOrder: (order: string[]) => void;
   setRubroOrder: (order: string[]) => void;
@@ -28,6 +30,7 @@ const initial: CartillaState = {
   mapping: null,
   cartillaData: null,
   textBlocks: null,
+  planOperativoBlocks: null,
   provinciaOrder: [],
   zonaOrder: [],
   rubroOrder: [],
@@ -64,6 +67,10 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, textBlocks }));
   }, []);
 
+  const setPlanOperativoBlocks = useCallback((planOperativoBlocks: NormasBlock[] | null) => {
+    setState((prev) => ({ ...prev, planOperativoBlocks }));
+  }, []);
+
   const setProvinciaOrder = useCallback((provinciaOrder: string[]) => {
     setState((prev) => ({ ...prev, provinciaOrder }));
   }, []);
@@ -79,7 +86,7 @@ export function CartillaProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setState(initial), []);
 
   return (
-    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setProvinciaOrder, setZonaOrder, setRubroOrder, reset }}>
+    <CartillaContext.Provider value={{ ...state, setParsedFile, applyMapping, setTextBlocks, setPlanOperativoBlocks, setProvinciaOrder, setZonaOrder, setRubroOrder, reset }}>
       {children}
     </CartillaContext.Provider>
   );

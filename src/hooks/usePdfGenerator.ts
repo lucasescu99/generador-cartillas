@@ -34,7 +34,7 @@ export function usePdfGenerator() {
     };
   }, [pdfUrl]);
 
-  const start = useCallback((prestadores: Prestador[], textBlocks?: NormasBlock[] | null, provinciaOrder?: string[], zonaOrder?: string[], rubroOrder?: string[]) => {
+  const start = useCallback((prestadores: Prestador[], textBlocks?: NormasBlock[] | null, planOperativoBlocks?: NormasBlock[] | null, provinciaOrder?: string[], zonaOrder?: string[], rubroOrder?: string[]) => {
     setStatus('generating');
     setProgress({ phase: 'generating', current: 0, total: 0, message: 'Iniciando...' });
     setMetadata(null);
@@ -79,6 +79,7 @@ export function usePdfGenerator() {
       payload: {
         prestadores,
         textBlocks: textBlocks || undefined,
+        planOperativoBlocks: planOperativoBlocks || undefined,
         provinciaOrder: provinciaOrder || undefined,
         zonaOrder: zonaOrder || undefined,
         rubroOrder: rubroOrder || undefined,
