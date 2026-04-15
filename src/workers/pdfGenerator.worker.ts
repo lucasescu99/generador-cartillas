@@ -1083,24 +1083,23 @@ async function createPlanOperativoCover(templateBuffer: ArrayBuffer): Promise<Ui
   const fontBold = await doc.embedFont(poppinsSemiBoldRaw);
   const brandColor = rgb(2 / 255, 54 / 255, 112 / 255); // #023670
 
-  // Cover the existing "Contactos, Servicios y Cobertura." title with a white
-  // rectangle (pdf-lib origin is bottom-left). The template's title occupies
-  // roughly the middle band of the page.
+  // Cover the existing "Contactos, Servicios y Cobertura." title (two lines)
+  // with a white rectangle. pdf-lib origin is bottom-left.
   page.drawRectangle({
     x: 0,
     y: pageH * 0.44,
     width: pageW,
-    height: pageH * 0.16,
+    height: pageH * 0.30,
     color: rgb(1, 1, 1),
   });
 
-  // Draw new title, wrapped to two lines to match the visual rhythm of the
-  // original cover.
+  // Draw new title, wrapped to two lines to match the original layout
+  // (first line where "Contactos, Servicios" used to be).
   const line1 = 'Plan de Implementación';
   const line2 = 'Operativa.';
   const size = 36;
   const x = 55;
-  const line1Y = pageH * 0.52;
+  const line1Y = pageH * 0.65;
   const line2Y = line1Y - size * 1.15;
 
   page.drawText(line1, { x, y: line1Y, size, font: fontBold, color: brandColor });
