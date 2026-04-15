@@ -1087,9 +1087,9 @@ async function createPlanOperativoCover(templateBuffer: ArrayBuffer): Promise<Ui
   // with a white rectangle. pdf-lib origin is bottom-left.
   page.drawRectangle({
     x: 0,
-    y: pageH * 0.44,
+    y: pageH * 0.58,
     width: pageW,
-    height: pageH * 0.30,
+    height: pageH * 0.16,
     color: rgb(1, 1, 1),
   });
 
